@@ -10,14 +10,17 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/muthuishere/routsi/internal/backend"
 	"github.com/muthuishere/routsi/internal/config"
@@ -45,6 +48,8 @@ func main() {
 		manage("uninstall")
 	case "status":
 		manage("status")
+	case "token":
+		genTokens()
 	case "version", "-v", "--version":
 		fmt.Println("routsi", version)
 	case "help", "-h", "--help":
@@ -64,6 +69,7 @@ usage:
   routsi install  [-config path]  install as a keep-alive background service
   routsi uninstall                remove the service
   routsi status                   is the service running?
+  routsi token [-n count]         generate API bearer tokens for auth.tokens_env
   routsi version
 
 config resolution: -config flag > ./models.yaml > ~/.config/routsi/models.yaml
@@ -133,6 +139,34 @@ func serve() {
 		log.Fatal(hs.ListenAndServeTLS(cfg.TLS.Cert, cfg.TLS.Key))
 	}
 	log.Fatal(http.ListenAndServe(cfg.Listen, h))
+}
+
+// genTokens prints cryptographically random bearer tokens for auth.tokens_env.
+// Tokens are printed once and never stored — the operator owns them from here.
+func genTokens() {
+	n := flag.Int("n", 1, "how many tokens")
+	flag.Parse()
+	if *n < 1 || *n > 100 {
+		log.Fatal("token: -n must be 1..100")
+	}
+	tokens := make([]string, *n)
+	for i := range tokens {
+		b := make([]byte, 24)
+		if _, err := rand.Read(b); err != nil {
+			log.Fatalf("token: %v", err)
+		}
+		tokens[i] = "rtk_" + base64.RawURLEncoding.EncodeToString(b)
+		fmt.Println(tokens[i])
+	}
+	fmt.Fprintf(os.Stderr, `
+Enable auth: put in models.yaml
+  auth:
+    tokens_env: ROUTSI_TOKENS
+then export (add to your shell profile or service env):
+  export ROUTSI_TOKENS="%s"
+Clients authenticate with it as their OpenAI api_key
+(Authorization: Bearer <token>); dashboard: /?token=<token>
+`, strings.Join(tokens, ","))
 }
 
 func manage(action string) {

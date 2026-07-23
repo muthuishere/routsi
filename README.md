@@ -44,6 +44,12 @@ group level can point at an agent too: `high: devin/claude-opus-4.8`.
 
 ## Auth (token or mTLS)
 
+Generate tokens with the built-in CLI:
+
+```sh
+routsi token -n 2      # prints rtk_... tokens + setup instructions
+```
+
 ```yaml
 auth:
   tokens_env: ROUTSI_TOKENS   # export ROUTSI_TOKENS="tok1,tok2" — enables bearer auth
