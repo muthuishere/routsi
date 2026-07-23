@@ -135,5 +135,13 @@ untested against a live Anthropic upstream (OpenRouter covers those models via
 passthrough); CLI-agent + translator streaming is faked off Complete; codex/copilot/
 claude one-shot (transcript rendered, no session mapping; codex has resume worth
 wiring); codex variant names account-dependent.
-Not yet built (see docs/research/): inbound auth, tool-call passthrough on enveloped
-paths, escalation memory handoff, compaction, budget caps, learned scorer, Phase-2 router.
+Added 2026-07-23 (post-publish): **inbound auth** — `auth.tokens_env` bearer tokens
+guard /v1/* + /stats + /metrics (constant-time compare; /health open; dashboard via
+/?token=...; unit-tested 401/200/query-token) — and **TLS/mTLS** — `tls.cert/key` for
+HTTPS, `tls.client_ca` requires+verifies client certs (wired in main.go, not
+live-tested). Repo is PUBLIC: github.com/muthuishere/routsi (MIT, AGENTS.md guide,
+gh-pages site at muthuishere.github.io/routsi via gh-pages branch — Pages REST API
+404s on gh oauth tokens, branch push auto-provisions). Local dir still named
+llm-forward-proxy.
+Not yet built (see docs/research/): tool-call passthrough on enveloped paths,
+escalation memory handoff, compaction, budget caps, learned scorer, Phase-2 router.
