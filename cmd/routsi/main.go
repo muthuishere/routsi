@@ -10,6 +10,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"log"
@@ -104,9 +106,33 @@ func serve() {
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
-	log.Printf("routsi %s on %s — %d models, default %s — dashboard http://localhost%s/",
-		version, cfg.Listen, len(cfg.Models), cfg.Default, cfg.Listen)
-	log.Fatal(http.ListenAndServe(cfg.Listen, srv.Handler()))
+	authNote := "auth OFF (open)"
+	if n := len(cfg.Auth.AuthTokens()); n > 0 {
+		authNote = fmt.Sprintf("auth ON (%d tokens)", n)
+	}
+	log.Printf("routsi %s on %s — %d models, default %s, %s — dashboard http://localhost%s/",
+		version, cfg.Listen, len(cfg.Models), cfg.Default, authNote, cfg.Listen)
+
+	h := srv.Handler()
+	if cfg.TLS.Cert != "" {
+		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+		if cfg.TLS.ClientCA != "" { // mTLS: require + verify client certs
+			ca, err := os.ReadFile(cfg.TLS.ClientCA)
+			if err != nil {
+				log.Fatalf("tls client_ca: %v", err)
+			}
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(ca) {
+				log.Fatalf("tls client_ca: no certs parsed from %s", cfg.TLS.ClientCA)
+			}
+			tlsCfg.ClientCAs = pool
+			tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+			log.Printf("mTLS on: client certs required (CA %s)", cfg.TLS.ClientCA)
+		}
+		hs := &http.Server{Addr: cfg.Listen, Handler: h, TLSConfig: tlsCfg}
+		log.Fatal(hs.ListenAndServeTLS(cfg.TLS.Cert, cfg.TLS.Key))
+	}
+	log.Fatal(http.ListenAndServe(cfg.Listen, h))
 }
 
 func manage(action string) {

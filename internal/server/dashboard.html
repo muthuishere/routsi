@@ -54,8 +54,10 @@ const fmt = n => n>=1e6 ? (n/1e6).toFixed(1)+'M' : n>=1e3 ? (n/1e3).toFixed(1)+'
 function dur(s){ const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);
   if(d) return d+'d '+h+'h'; if(h) return h+'h '+m+'m'; if(m) return m+'m '+(s%60)+'s'; return s+'s'; }
 
+const TOKEN = new URLSearchParams(location.search).get('token');
 async function tick(){
-  let d; try{ d = await (await fetch('/stats')).json(); }catch(e){ return; }
+  const opts = TOKEN ? {headers:{Authorization:'Bearer '+TOKEN}} : {};
+  let r, d; try{ r = await fetch('/stats', opts); if(r.status===401){ showAuth(); return; } d = await r.json(); }catch(e){ return; }
   document.getElementById('uptime').textContent = 'up '+dur(d.uptime_seconds);
   document.getElementById('ts').textContent = new Date().toLocaleTimeString();
 
@@ -94,6 +96,10 @@ async function tick(){
     `<table><thead><tr><th>Model</th><th>Requests</th><th>Escalations</th><th>Tokens</th><th>Avg</th><th>Max</th><th>Errors</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function esc(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function showAuth(){
+  document.getElementById('tablewrap').innerHTML =
+    '<div class="empty">401 — this server requires a token. Open <code>/?token=YOUR_TOKEN</code>.</div>';
+}
 tick(); setInterval(tick, 3000);
 </script>
 </body>

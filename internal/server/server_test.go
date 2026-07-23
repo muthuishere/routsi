@@ -496,3 +496,68 @@ models:
 		t.Fatal("want startup error for unknown member")
 	}
 }
+
+// TestTokenAuthGuardsAPI: with tokens configured, /v1/* and /stats 401 without
+// a valid bearer (header or ?token=), /health stays open.
+func TestTokenAuthGuardsAPI(t *testing.T) {
+	var x string
+	up := mockUpstream(t, "cheap", &x)
+	defer up.Close()
+	up2 := mockUpstream(t, "strong", &x)
+	defer up2.Close()
+	t.Setenv("ROUTSI_TEST_TOKENS", "tok-alpha,tok-beta")
+
+	yaml := fmt.Sprintf(`
+default: gpt-cheap
+auth:
+  tokens_env: ROUTSI_TEST_TOKENS
+models:
+  - name: gpt-cheap
+    type: forward
+    base_url: %s
+`, up.URL)
+	cfg, err := config.Parse([]byte(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(cfg, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+
+	body := `{"model":"gpt-cheap","messages":[{"role":"user","content":"hi"}]}`
+	// No token -> 401.
+	resp := post(t, ts.URL, body, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("no token: status %d, want 401", resp.StatusCode)
+	}
+	// Wrong token -> 401.
+	resp = post(t, ts.URL, body, map[string]string{"Authorization": "Bearer nope"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("bad token: status %d", resp.StatusCode)
+	}
+	// Valid token -> 200.
+	resp = post(t, ts.URL, body, map[string]string{"Authorization": "Bearer tok-beta"})
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("good token: status %d", resp.StatusCode)
+	}
+	// /stats guarded, ?token= works (dashboard path).
+	r2, _ := http.Get(ts.URL + "/stats")
+	if r2.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("/stats open without token: %d", r2.StatusCode)
+	}
+	r3, _ := http.Get(ts.URL + "/stats?token=tok-alpha")
+	if r3.StatusCode != http.StatusOK {
+		t.Fatalf("/stats with query token: %d", r3.StatusCode)
+	}
+	// /health always open.
+	r4, _ := http.Get(ts.URL + "/health")
+	if r4.StatusCode != http.StatusOK {
+		t.Fatalf("/health guarded: %d", r4.StatusCode)
+	}
+}

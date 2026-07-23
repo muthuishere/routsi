@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -97,6 +98,37 @@ type Config struct {
 	Tiers     map[string]string `yaml:"tiers"` // tier name -> model name
 	StickyTTL time.Duration     `yaml:"sticky_ttl"`
 	Models    []Model           `yaml:"models"`
+	Auth      AuthConfig        `yaml:"auth"`
+	TLS       TLSConfig         `yaml:"tls"`
+}
+
+// AuthConfig gates the API with bearer tokens. Prefer tokens_env (values in the
+// environment) over inline tokens (values in a committed file).
+type AuthConfig struct {
+	TokensEnv string   `yaml:"tokens_env"` // env var holding space/comma-separated tokens
+	Tokens    []string `yaml:"tokens"`     // inline (discouraged — keeps secrets out of git)
+}
+
+// TLSConfig enables HTTPS, and mTLS when ClientCA is set (client certs are then
+// required and verified against that CA).
+type TLSConfig struct {
+	Cert     string `yaml:"cert"`
+	Key      string `yaml:"key"`
+	ClientCA string `yaml:"client_ca"`
+}
+
+// AuthTokens resolves the effective token set (env + inline). Empty => auth off.
+func (a AuthConfig) AuthTokens() []string {
+	var out []string
+	if a.TokensEnv != "" {
+		for _, t := range strings.FieldsFunc(os.Getenv(a.TokensEnv), func(r rune) bool {
+			return r == ',' || r == ' ' || r == '\n' || r == '\t'
+		}) {
+			out = append(out, t)
+		}
+	}
+	out = append(out, a.Tokens...)
+	return out
 }
 
 func Load(path string) (*Config, error) {

@@ -7,6 +7,19 @@ sticky_ttl: 10m
 # routsi config. Dashboard at http://<listen>/  ·  /stats (json)  ·  /metrics (prom).
 # May also live at ~/.config/routsi/models.yaml. Run as a service: `routsi install`.
 
+# --- Inbound auth (optional). When tokens are set, /v1/* + /stats + /metrics
+# require `Authorization: Bearer <token>` (dashboard: open /?token=...).
+# Tokens live in an ENV VAR — never put values in this file.
+# auth:
+#   tokens_env: ROUTSI_TOKENS      # e.g. export ROUTSI_TOKENS="tok1,tok2"
+
+# --- TLS / mTLS (optional). cert+key => HTTPS; client_ca additionally
+# REQUIRES and verifies client certificates (mutual TLS).
+# tls:
+#   cert: /path/server.crt
+#   key: /path/server.key
+#   client_ca: /path/clients-ca.crt
+
 # `auto` routes over these levels (cheap/strong accepted as aliases of low/high).
 tiers:
   cheap: gpt-cheap

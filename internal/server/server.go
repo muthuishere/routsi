@@ -41,6 +41,7 @@ type Server struct {
 	sticky   *sticky.Store
 	targets  map[string]*target
 	metrics  *metrics.Collector
+	tokens   []string // bearer tokens; empty = auth off
 }
 
 func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, error) {
@@ -57,6 +58,7 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 		sticky:   sticky.New(cfg.StickyTTL),
 		targets:  map[string]*target{},
 		metrics:  metrics.New(),
+		tokens:   cfg.Auth.AuthTokens(),
 	}
 	for i := range cfg.Models {
 		m := &cfg.Models[i]
@@ -110,18 +112,21 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/chat/completions", s.chat)
-	mux.HandleFunc("GET /v1/models", s.models)
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	})
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
+	// Guarded: the API and observability data (they spend keys / expose usage).
+	mux.HandleFunc("POST /v1/chat/completions", s.guard(s.chat))
+	mux.HandleFunc("GET /v1/models", s.guard(s.models))
+	mux.HandleFunc("GET /metrics", s.guard(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		_, _ = io.WriteString(w, s.metrics.Prometheus())
-	})
-	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, _ *http.Request) {
+	}))
+	mux.HandleFunc("GET /stats", s.guard(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(s.metrics.Snapshot())
+	}))
+	// Open: liveness, and the dashboard shell (holds no data; it fetches /stats
+	// with the token the operator passes as /?token=...).
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

@@ -26,6 +26,37 @@ curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
 - **`model: "openrouter/anthropic/claude-haiku-4.5"`** — a concrete model, no routing.
 - **`model: "devin/opus"`** — an agent as a model.
 
+### Forwarding to an agent model (devin/…)
+
+Agent CLIs expose their inner models as `<agent>/<model>` catalog entries — from
+`variants:` or discovery (`GET /v1/models` lists them all). Just name one:
+
+```sh
+curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+  -H 'X-Conversation-Id: my-thread-1' \
+  -d '{"model":"devin/claude-opus-4.8","messages":[{"role":"user","content":"refactor plan?"}]}'
+```
+
+`devin/claude-opus-4.8` runs `devin --model claude-opus-4.8`; the conversation id maps
+to a real Devin session (`-r` resume on later turns). Bare `devin` uses the default
+model. Same pattern for `codex/…`, `copilot/…`, `claude/…` (one-shot). A dynamic
+group level can point at an agent too: `high: devin/claude-opus-4.8`.
+
+## Auth (token or mTLS)
+
+```yaml
+auth:
+  tokens_env: ROUTSI_TOKENS   # export ROUTSI_TOKENS="tok1,tok2" — enables bearer auth
+tls:
+  cert: server.crt            # cert+key = HTTPS
+  key: server.key
+  client_ca: clients-ca.crt   # + client_ca = mTLS (client certs required)
+```
+
+With tokens on: `/v1/*`, `/stats`, `/metrics` need `Authorization: Bearer <tok>`
+(OpenAI SDKs send this automatically as the api_key); dashboard: `/?token=tok`.
+`/health` stays open. Token values live in env vars, never in the config file.
+
 The chosen model is returned in the `X-Selected-Model` header. Every response
 carries a `usage` block.
 
