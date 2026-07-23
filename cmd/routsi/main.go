@@ -50,6 +50,8 @@ func main() {
 		manage("status")
 	case "token":
 		genTokens()
+	case "certs":
+		genCerts()
 	case "version", "-v", "--version":
 		fmt.Println("routsi", version)
 	case "help", "-h", "--help":
@@ -70,6 +72,7 @@ usage:
   routsi uninstall                remove the service
   routsi status                   is the service running?
   routsi token [-n count]         generate API bearer tokens for auth.tokens_env
+  routsi certs [-dir d] [-host h] generate CA + server + client certs for mTLS
   routsi version
 
 config resolution: -config flag > ./models.yaml > ~/.config/routsi/models.yaml

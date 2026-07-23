@@ -50,6 +50,13 @@ Generate tokens with the built-in CLI:
 routsi token -n 2      # prints rtk_... tokens + setup instructions
 ```
 
+For mTLS, generate the whole trust setup (CA + server + client certs) in one command:
+
+```sh
+routsi certs                        # -> ~/.config/routsi/certs/ (keys 0600)
+routsi certs -host myhost.example   # extra server SANs
+```
+
 ```yaml
 auth:
   tokens_env: ROUTSI_TOKENS   # export ROUTSI_TOKENS="tok1,tok2" — enables bearer auth
