@@ -1,0 +1,88 @@
+# routsi config. Ask for model "auto" to route; ask for a concrete
+# name to bypass routing entirely. API keys are env-var names, never values.
+listen: ":8080"
+default: gpt-cheap
+sticky_ttl: 10m
+
+# routsi config. Dashboard at http://<listen>/  ·  /stats (json)  ·  /metrics (prom).
+# May also live at ~/.config/routsi/models.yaml. Run as a service: `routsi install`.
+
+# `auto` routes over these levels (cheap/strong accepted as aliases of low/high).
+tiers:
+  cheap: gpt-cheap
+  strong: gpt-strong
+
+# Dynamic virtual models: ask for "dynamic-1" and the task is classified
+# (low|medium|high) and dispatched to the mapped member — any catalog model
+# works, including discovered variants and CLI agents. Conversations pin to
+# their member and only ever escalate.
+# - name: dynamic-1
+#   type: dynamic
+#   levels:
+#     low: gpt-cheap
+#     medium: openai/gpt-4o-mini
+#     high: devin/claude-opus-4.8
+
+models:
+  # OpenRouter gives every hosted model through one key (live-verified:
+  # haiku + gemini-flash + streaming + dynamic groups over these members).
+  - name: openrouter
+    type: forward
+    provider: openrouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    variants:
+      - anthropic/claude-haiku-4.5
+      - google/gemini-3.5-flash
+    # discover_models: true  # or pull the full OpenRouter catalog (capped 100)
+
+  - name: gpt-cheap
+    type: forward            # openai style = raw byte passthrough
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    upstream_model: deepseek-chat
+
+  - name: gpt-strong
+    type: forward
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    upstream_model: gpt-5.2
+
+  # Anthropic-style upstream translated via toolnexus:
+  # - name: claude
+  #   type: forward
+  #   style: anthropic
+  #   base_url: https://api.anthropic.com
+  #   api_key_env: ANTHROPIC_API_KEY
+  #   upstream_model: claude-sonnet-5
+
+  # Custom Go handler (register in code: reg.Register("my-handler", impl)):
+  # - name: my-agent
+  #   type: custom
+  #   handler: my-handler
+
+  # CLI agents as models. `variants:` expands into catalog entries
+  # (devin/opus, codex/gpt-5.6-sol, ...) selectable like any model; `provider:`
+  # shows as owned_by in /v1/models. State lives in a proxy-managed cache dir.
+  # - name: devin        # conversations map to real Devin sessions (-r resume)
+  #   type: devin
+  #   provider: cognition
+  #   variants: [sonnet, opus]                 # -> devin --model <variant>
+  #   permission_mode: auto                    # optional -> devin --permission-mode
+  # - name: codex        # one-shot codex exec; model names depend on your account
+  #   type: codex
+  #   provider: openai
+  #   variants: [gpt-5.6-sol]                  # -> codex exec -m <variant>
+  # - name: copilot
+  #   type: copilot
+  #   provider: github
+  #   variants: [claude-sonnet-5]              # -> copilot --model <variant>
+  # - name: claude       # Claude Code CLI, one-shot -p
+  #   type: claude
+  #   provider: anthropic
+  #   discover_models: true                    # models from known-models.json
+  #
+  # codex/copilot/claude model lists are configurable in
+  # ~/.config/routsi/known-models.json (written with defaults on
+  # first run); devin's list is discovered live from the CLI itself.
+  # This file may also live at ~/.config/routsi/models.yaml.

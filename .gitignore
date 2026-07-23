@@ -1,0 +1,17 @@
+# build output
+/bin/
+*.exe
+
+# local config that may hold real endpoints/keys-by-name for a machine
+/models.local.yaml
+
+# editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# go
+*.test
+*.out
+coverage.*

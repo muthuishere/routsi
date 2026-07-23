@@ -1,0 +1,29 @@
+version: "3"
+
+vars:
+  VERSION:
+    sh: git describe --tags --always 2>/dev/null || echo dev
+
+tasks:
+  dev:
+    desc: Run routsi with models.yaml
+    cmds:
+      - go run ./cmd/routsi serve -config models.yaml
+
+  test:
+    desc: Vet + all tests
+    cmds:
+      - go vet ./...
+      - go test ./...
+
+  build:
+    desc: Build the routsi binary (version-stamped)
+    cmds:
+      - go build -ldflags "-s -w -X main.version={{.VERSION}}" -o bin/routsi ./cmd/routsi
+
+  install:
+    desc: Build and install routsi to ~/.local/bin
+    deps: [build]
+    cmds:
+      - install -m 0755 bin/routsi ~/.local/bin/routsi
+      - echo "installed ~/.local/bin/routsi — run 'routsi install' to run it as a service"
