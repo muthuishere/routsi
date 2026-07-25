@@ -101,6 +101,20 @@ Costs / open risks:
 - In-memory ⇒ single-instance and non-durable across restarts (in-flight jobs lost).
   Acceptable for the single-binary model; note it.
 
+## Decisions (owner, 2026-07-25)
+
+- **Additive only** — new provider kind, nothing existing changes (ADR-002/003 parked).
+- **Auth: none for v1.** Leave an empty, reserved config placeholder so worker auth can be
+  added later without a breaking change:
+  ```yaml
+  workers:
+    auth: {}   # reserved — no worker auth yet
+  ```
+- **One worker per queue** (clean stickiness; pool is a later ADR).
+- **Zero-worker → fast 503** (no worker polled recently), not a long block.
+- **Dynamic registration** is the headline (anyone can join); a config-declared
+  `type: queue` may reserve a name too.
+
 ## Open questions for the owner
 
 1. **Dynamic registration only, or also config-declared queues?** (I lean: support both —

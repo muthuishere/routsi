@@ -47,9 +47,13 @@ Any tool that takes a prompt and prints an answer works — that's the whole con
 ## Consequences
 
 - Reuses the CLI binary → one distribution artifact, cross-platform.
-- Worker auth = **separate worker token** (per the huddle) — answering is privileged.
+- **Worker auth: none in v1** (owner, 2026-07-25) — reserved empty config placeholder,
+  added later. The `--token` flag is accepted but optional/ignored for now so the skill
+  interface is forward-compatible.
 - v1 non-streaming (pull worker returns a whole answer); document it.
 - One worker per queue in v1 (clean stickiness — ADR-001); pool later.
+- The **agent skill wraps the built-in `routsi worker run`** (one artifact); optionally
+  `routsi worker scaffold` emits an editable shell script.
 
 ## Open questions
 
