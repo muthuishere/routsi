@@ -1,33 +1,50 @@
 #!/usr/bin/env node
 'use strict';
 
-// Thin launcher installed as the `routsi` bin entry. Execs the native binary
-// downloaded by scripts/postinstall.js into npm/bin/, passing argv/stdio/exit
-// code straight through. Kept separate from the Go build's own `bin/routsi`
-// output so `task build` (repo checkout) and this npm package never collide.
+// Thin launcher installed as the `routsi` bin entry. Guarantees the native
+// binary is present (self-healing — downloads it on demand via
+// npm/resolve-binary.js if postinstall didn't run or was blocked, e.g. by
+// `allow-scripts`), then execs it, passing argv/stdio/exit code straight
+// through. Kept separate from the Go build's own `bin/routsi` output so
+// `task build` (repo checkout) and this npm package never collide.
 
-const path = require('path');
-const fs = require('fs');
-const { spawnSync } = require('child_process');
+const { spawn } = require('child_process');
+const { ensureBinary } = require('./resolve-binary');
 
-const binName = process.platform === 'win32' ? 'routsi.exe' : 'routsi';
-const binPath = path.join(__dirname, 'bin', binName);
+(async function main() {
+  let binPath;
+  try {
+    binPath = await ensureBinary({ quiet: false });
+  } catch (err) {
+    console.error('routsi: ' + (err && err.message ? err.message : String(err)));
+    process.exit(1);
+    return;
+  }
 
-if (!fs.existsSync(binPath)) {
-  console.error(
-    `routsi: native binary not found at ${binPath}.\n` +
-    'The postinstall step may have failed or been skipped (offline install?).\n' +
-    'Try: npm install -g routsi --force\n' +
-    'Or download a binary manually from https://github.com/muthuishere/routsi/releases'
-  );
-  process.exit(1);
-}
+  const child = spawn(binPath, process.argv.slice(2), { stdio: 'inherit' });
 
-const result = spawnSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
+  const forwardSignal = (signal) => {
+    if (child.killed === false) {
+      try {
+        child.kill(signal);
+      } catch (_) {
+        // ignore — child may have already exited
+      }
+    }
+  };
+  process.on('SIGINT', forwardSignal);
+  process.on('SIGTERM', forwardSignal);
 
-if (result.error) {
-  console.error('routsi: failed to launch native binary: ' + result.error.message);
-  process.exit(1);
-}
+  child.on('error', (err) => {
+    console.error('routsi: failed to launch native binary: ' + err.message);
+    process.exit(1);
+  });
 
-process.exit(result.status === null ? 1 : result.status);
+  child.on('exit', (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code === null ? 1 : code);
+  });
+})();

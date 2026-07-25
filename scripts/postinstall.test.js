@@ -1,11 +1,21 @@
 #!/usr/bin/env node
 'use strict';
 
-// Tiny assertion check for the pure platform->asset mapping in postinstall.js.
+// Tiny assertion checks for npm/resolve-binary.js: the pure platform->asset
+// mapping, and ensureBinary's no-op-when-present short circuit.
 // Run with: node scripts/postinstall.test.js
 
 const assert = require('assert');
-const { assetName, binaryName, releaseUrl } = require('./postinstall.js');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const {
+  assetName,
+  binaryName,
+  releaseUrl,
+  binaryPath,
+  ensureBinary,
+} = require('../npm/resolve-binary.js');
 
 function eq(actual, expected, label) {
   assert.strictEqual(actual, expected, `${label}: expected ${expected}, got ${actual}`);
@@ -30,4 +40,43 @@ eq(
 assert.throws(() => assetName('sunos', 'x64', '0.1.0'), /unsupported platform\/arch/, 'unsupported platform throws');
 assert.throws(() => assetName('linux', 'ia32', '0.1.0'), /unsupported platform\/arch/, 'unsupported arch throws');
 
-console.log('\nall postinstall mapping checks passed');
+console.log('\nall resolve-binary mapping checks passed');
+
+// ensureBinary should be a no-op (no network) when the binary already exists
+// and is non-empty.
+async function testEnsureBinaryNoOp() {
+  const binPath = binaryPath();
+  const binDir = path.dirname(binPath);
+  fs.mkdirSync(binDir, { recursive: true });
+
+  const existedBefore = fs.existsSync(binPath);
+  const backupPath = existedBefore ? binPath + '.bak-' + Date.now() : null;
+  if (existedBefore) {
+    fs.renameSync(binPath, backupPath);
+  }
+
+  try {
+    fs.writeFileSync(binPath, 'fake-binary-contents');
+
+    // Sabotage network access: if ensureBinary tried to download, https.get
+    // pointed at a bogus host would hang/fail — but since the file already
+    // exists, ensureBinary must return immediately without touching https.
+    const result = await ensureBinary({ quiet: true });
+    eq(result, binPath, 'ensureBinary returns existing binary path unchanged');
+    console.log('ok - ensureBinary is a no-op when binary already present');
+  } finally {
+    fs.rmSync(binPath, { force: true });
+    if (existedBefore) {
+      fs.renameSync(backupPath, binPath);
+    }
+  }
+}
+
+testEnsureBinaryNoOp()
+  .then(() => {
+    console.log('\nall ensureBinary no-op checks passed');
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

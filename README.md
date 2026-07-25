@@ -20,9 +20,12 @@ routsi serve                     # listens on :8080 by default
 npm install -g @muthuishere/routsi
 ```
 
-`postinstall` downloads the prebuilt `routsi` binary for your OS/arch from [GitHub
-Releases](https://github.com/muthuishere/routsi/releases) — no Go toolchain needed.
-See [`docs/adr/006-npm-distribution.md`](docs/adr/006-npm-distribution.md) for how it
+`postinstall` best-effort prefetches the prebuilt `routsi` binary for your OS/arch
+from [GitHub Releases](https://github.com/muthuishere/routsi/releases) — no Go
+toolchain needed. The launcher is self-healing: if postinstall didn't run (blocked
+by `allow-scripts`, offline, whatever), the first `routsi` invocation fetches the
+binary itself, so the command always works either way. See
+[`docs/adr/006-npm-distribution.md`](docs/adr/006-npm-distribution.md) for how it
 works.
 
 Point any OpenAI client at `http://localhost:8080/v1`. Then:

@@ -1,14 +1,15 @@
 {
   "name": "@muthuishere/routsi",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "OpenAI-compatible dynamic LLM router — a single Go binary, installed via npm as a prebuilt native binary",
   "license": "MIT",
   "bin": {
     "routsi": "npm/launcher.js"
   },
   "files": [
-    "npm",
-    "scripts",
+    "npm/resolve-binary.js",
+    "npm/launcher.js",
+    "scripts/postinstall.js",
     "README.md",
     "LICENSE"
   ],

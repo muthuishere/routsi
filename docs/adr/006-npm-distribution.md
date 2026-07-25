@@ -17,16 +17,31 @@ cost of a network fetch at install time instead of pure npm-registry resolution)
 
 - Publish a single npm package, name **`routsi`** (confirmed available on the
   registry 2026-07-25).
-- `package.json` `bin.routsi` points at `npm/launcher.js`, a zero-dependency script
-  that execs the downloaded binary at `npm/bin/routsi[.exe]`, passing through
-  argv/stdio/exit code.
-- `postinstall` (`scripts/postinstall.js`, zero deps — only `https`/`fs`/`path`/
-  `os`/`zlib`/`crypto`/`child_process`) detects OS/arch, downloads the matching
-  release asset, verifies it against the release's `checksums.txt` (best-effort —
-  a missing checksums file warns but doesn't block, since older releases may
-  predate it), unpacks it (`tar`/`unzip`, both present on macOS/Linux/modern
-  Windows), and places the binary at `npm/bin/routsi[.exe]` with mode `0755`.
-  Re-running install is a no-op if that binary already exists.
+- **Self-healing launcher, postinstall is optional** (revised 2026-07-25 — npm is
+  trending toward blocking install scripts by default, e.g. `allow-scripts`; a
+  `postinstall`-only design would leave those installs with no binary at all).
+  The fetch/extract logic lives once in `npm/resolve-binary.js` (zero deps — only
+  `https`/`fs`/`path`/`os`/`crypto`/`child_process`), exporting `assetName`,
+  `binaryPath`, `version`, and `ensureBinary({quiet})`. `ensureBinary` returns the
+  path to `npm/bin/routsi[.exe]` immediately if it's already present and non-empty;
+  otherwise it downloads the matching release asset for `version()` (package.json's
+  version, overridable via `ROUTSI_BINARY_VERSION` for testing against an
+  already-released version), verifies it against the release's `checksums.txt`
+  (best-effort — a missing checksums file warns but doesn't block, since older
+  releases may predate it), unpacks it (`tar`/`unzip`, both present on
+  macOS/Linux/modern Windows), and places the binary at `npm/bin/routsi[.exe]` with
+  mode `0755`.
+  - `package.json` `bin.routsi` points at `npm/launcher.js`, which `await
+    ensureBinary({quiet:false})`s before every `routsi` invocation — so the binary
+    is guaranteed on first run regardless of whether postinstall ran, was blocked,
+    or failed. It then execs the binary, forwarding argv/stdio/exit code (and
+    SIGINT/SIGTERM).
+  - `postinstall` (`scripts/postinstall.js`) is now a thin **best-effort prefetch**:
+    it calls `ensureBinary({quiet:false})` to warm the cache at install time (so the
+    first `routsi` run doesn't pay download latency), but catches every error and
+    always `process.exit(0)`s — a network hiccup or a blocked install script can
+    never fail `npm install`.
+  - Re-running either path is a no-op once the binary exists.
 - **Asset naming contract** (the load-bearing string shared between
   `scripts/postinstall.js` and `.github/workflows/release.yml`):
   ```
@@ -76,7 +91,12 @@ cost of a network fetch at install time instead of pure npm-registry resolution)
   Sigstore/cosign signing) is out of scope for v0.1.
 - Offline installs (`--offline`/`--prefer-offline` without a cached binary) fail
   loudly with a pointer to manual download, rather than silently producing a broken
-  `routsi` command.
+  `routsi` command — that check now happens in the launcher (on first run), not
+  just at install time.
+- Survives `allow-scripts`-style install-script blocking: with postinstall skipped
+  entirely, the first `routsi` invocation still self-heals (one-time "fetching
+  native binary..." line to stderr), so the npm distribution model keeps working
+  without relying on install scripts running at all.
 
 ## Open questions
 
