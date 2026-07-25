@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scenarios — routsi docs</title>
+<meta name="description" content="Copy-paste, end-to-end routsi recipes, backed by real integration tests.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<div class="bg"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="dot"></span>routsi</a>
+    <div class="nav-links">
+      <a href="../index.html#compare">Compare</a>
+      <a href="../index.html#who">Who it's for</a>
+      <a href="index.html">Docs</a>
+      <button class="themebtn" id="theme" aria-label="Toggle theme">◑</button>
+      <a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<div class="docshell">
+  <aside class="sidebar">
+    <div class="grp">
+      <h4>Start here</h4>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install</a>
+      <a href="quickstart.html">Quick start</a>
+      <a href="concepts.html">Core concepts</a>
+    </div>
+    <div class="grp">
+      <h4>Configure</h4>
+      <a href="configuration.html">models.yaml</a>
+      <a href="routing.html">Routing &amp; stickiness</a>
+      <a href="agents.html">Agents as models</a>
+      <a href="workers.html">Pull-workers</a>
+    </div>
+    <div class="grp">
+      <h4>Operate</h4>
+      <a href="auth.html">Auth &amp; mTLS</a>
+      <a href="dashboard.html">Dashboard &amp; metrics</a>
+      <a href="api.html">HTTP API</a>
+    </div>
+    <div class="grp">
+      <h4>Recipes</h4>
+      <a href="scenarios.html" class="active">Scenarios</a>
+    </div>
+  </aside>
+
+  <main class="doc-main">
+    <h1>Scenarios</h1>
+    <p class="lede">Copy-paste, end-to-end recipes. Each one runs against a real proxy — no hand-waving.</p>
+    <div class="callout">These scenarios mirror the repo's integration tests (<code>internal/server/scenarios_test.go</code>) — same requests, same expected headers/status codes — so this page stays honest as the code changes.</div>
+
+    <h2 id="auto">1 · Route automatically</h2>
+    <p><code>model:"auto"</code> classifies the task and picks a tier; check <code>X-Selected-Model</code> to see who answered.</p>
+    <div class="code"><div class="top"><span>cheap task → cheap model</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+  -d '{"model":"auto","messages":[{"role":"user","content":"say hi"}]}'
+# → X-Selected-Model: gpt-cheap</pre></div>
+    <div class="code"><div class="top"><span>hard task → escalated model</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+  -d '{"model":"auto","messages":[{"role":"user","content":"design a distributed consensus protocol with proofs"}]}'
+# → X-Selected-Model: gpt-strong</pre></div>
+
+    <h2 id="bypass">2 · Bypass to a concrete model</h2>
+    <p>Name a real model and routing is skipped entirely.</p>
+    <div class="code"><div class="top"><span>hard bypass</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+  -d '{"model":"gpt-strong","messages":[{"role":"user","content":"hi"}]}'
+# → X-Selected-Model: gpt-strong (no classification ran)</pre></div>
+
+    <h2 id="auth">3 · Token-based auth, end to end</h2>
+    <p>Generate a token, wire it into config, and confirm 401 → 200 from curl, the OpenAI SDK, and the dashboard.</p>
+    <div class="code"><div class="top"><span>1 · generate + store</span><button class="copy">copy</button></div><pre>routsi token -n 1
+# → prints: rtk_9f3a...
+
+echo 'ROUTSI_TOKENS=rtk_9f3a...' >> ~/.config/routsi/.env
+chmod 600 ~/.config/routsi/.env</pre></div>
+    <div class="code"><div class="top"><span>2 · models.yaml</span><button class="copy">copy</button></div><pre>auth:
+  tokens_env: ROUTSI_TOKENS</pre></div>
+    <div class="code"><div class="top"><span>3 · curl without the header</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+  -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}'
+# → HTTP/1.1 401 Unauthorized</pre></div>
+    <div class="code"><div class="top"><span>4 · curl with the header</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+  -H 'Authorization: Bearer rtk_9f3a...' \
+  -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}'
+# → HTTP/1.1 200 OK</pre></div>
+    <div class="code"><div class="top"><span>5 · same thing via the OpenAI Python SDK</span><button class="copy">copy</button></div><pre>from openai import OpenAI
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="rtk_9f3a...")
+r = client.chat.completions.create(model="auto", messages=[{"role":"user","content":"hi"}])
+print(r.choices[0].message.content)
+# → 200, works unmodified — the SDK sends the token as a normal api_key</pre></div>
+    <div class="code"><div class="top"><span>6 · the dashboard, token in the URL</span><button class="copy">copy</button></div><pre>open "http://localhost:8080/?token=rtk_9f3a..."</pre></div>
+    <div class="callout">/health stays open regardless of auth config — health checks and load balancers never need a token.</div>
+
+    <h2 id="mtls">4 · mTLS</h2>
+    <p>Generate a full CA + server + client chain, then require client certs.</p>
+    <div class="code"><div class="top"><span>generate + configure</span><button class="copy">copy</button></div><pre>routsi certs   # → ~/.config/routsi/certs/{ca,server,client}.{crt,key}</pre></div>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>tls:
+  cert: ~/.config/routsi/certs/server.crt
+  key: ~/.config/routsi/certs/server.key
+  client_ca: ~/.config/routsi/certs/ca.crt</pre></div>
+    <div class="code"><div class="top"><span>call it</span><button class="copy">copy</button></div><pre>curl -i https://localhost:8080/v1/chat/completions \
+  --cacert ~/.config/routsi/certs/ca.crt \
+  --cert ~/.config/routsi/certs/client.crt \
+  --key ~/.config/routsi/certs/client.key \
+  -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}'
+# → 200. Omit --cert/--key → TLS handshake fails before the request is even read.</pre></div>
+
+    <h2 id="agent-session">5 · Agent session that remembers</h2>
+    <p>Same <code>X-Conversation-Id</code> across turns resumes the real Devin session — not a replayed transcript.</p>
+    <div class="code"><div class="top"><span>turn 1</span><button class="copy">copy</button></div><pre>curl localhost:8080/v1/chat/completions \
+  -H 'X-Conversation-Id: refactor-1' \
+  -d '{"model":"devin/claude-opus-4.8","messages":[{"role":"user","content":"draft a refactor plan for the auth module"}]}'</pre></div>
+    <div class="code"><div class="top"><span>turn 2 — same header, same session</span><button class="copy">copy</button></div><pre>curl localhost:8080/v1/chat/completions \
+  -H 'X-Conversation-Id: refactor-1' \
+  -d '{"model":"devin/claude-opus-4.8","messages":[{"role":"user","content":"now do step 2"}]}'
+# → Devin resumes session refactor-1, remembers step 1</pre></div>
+
+    <h2 id="worker">6 · Pull-worker</h2>
+    <p>A remote agent registers a queue; requests to that queue name route to it.</p>
+    <div class="code"><div class="top"><span>on the worker machine</span><button class="copy">copy</button></div><pre>routsi worker run --proxy https://your-proxy:8080 --queue my-agent \
+  --agent 'codex exec -'</pre></div>
+    <div class="code"><div class="top"><span>from any client</span><button class="copy">copy</button></div><pre>curl localhost:8080/v1/chat/completions \
+  -d '{"model":"my-agent","messages":[{"role":"user","content":"hi"}]}'
+# → routed to the registered worker; 503 fast if none is polling</pre></div>
+
+    <h2 id="streaming">7 · Streaming with heartbeat</h2>
+    <p><code>"stream":true"</code> gets normal SSE chunks plus <code>: ping</code> keep-alives on long turns; SDKs ignore the pings.</p>
+    <div class="code"><div class="top"><span>stream a slow agent turn</span><button class="copy">copy</button></div><pre>curl -N localhost:8080/v1/chat/completions \
+  -d '{"model":"devin/claude-opus-4.8","stream":true,
+       "messages":[{"role":"user","content":"long task"}]}'
+# → data: {...} chunks, with ": ping" comment lines every ~15s while it thinks</pre></div>
+
+    <h2 id="dynamic-group">8 · Dynamic group routing</h2>
+    <p>Define a named group with levels; ask for the group name and let classification pick the member.</p>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>- name: dynamic-1
+  type: dynamic
+  levels:
+    low: gpt-cheap
+    medium: openai/gpt-4o-mini
+    high: devin/claude-opus-4.8</pre></div>
+    <div class="code"><div class="top"><span>call it</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+  -d '{"model":"dynamic-1","messages":[{"role":"user","content":"summarize this paragraph"}]}'
+# → X-Selected-Model: gpt-cheap (classified low)</pre></div>
+
+    <h2 id="secrets">9 · Secrets via .env layering</h2>
+    <p>Highest wins: process env &gt; <code>-env</code>/<code>ROUTSI_ENV_FILE</code> &gt; <code>./.env</code> &gt; <code>~/.config/routsi/.env</code>.</p>
+    <div class="code"><div class="top"><span>proof: a shell export beats every file</span><button class="copy">copy</button></div><pre>echo 'OPENAI_API_KEY=from-config-dir-file' > ~/.config/routsi/.env
+echo 'OPENAI_API_KEY=from-dot-env' > ./.env
+OPENAI_API_KEY=from-shell routsi serve
+# → routsi uses "from-shell": process env always wins, files never override it</pre></div>
+    <p>Full precedence details: <a class="link" href="auth.html#secrets">Auth &amp; mTLS → Secrets via .env</a>.</p>
+
+    <p style="margin-top:44px"><a class="btn btn-ghost" href="index.html">← Back to docs overview</a></p>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>routsi</div>
+    <div><a href="../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div>
+  </div>
+</footer>
+
+<script>
+const root=document.documentElement,tb=document.getElementById('theme');
+const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;
+tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t);};
+document.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{const pre=b.closest('.code').querySelector('pre');navigator.clipboard.writeText(pre.innerText).then(()=>{const o=b.textContent;b.textContent='copied ✓';setTimeout(()=>b.textContent=o,1400);});});
+// scroll-spy: highlight in-page anchors only (cross-page sidebar links are untouched)
+const links=[...document.querySelectorAll('.sidebar a[href^="#"]')];
+const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const so=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active');}}),{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.doc-main h2[id]').forEach(h=>so.observe(h));
+</script>
+</body>
+</html>

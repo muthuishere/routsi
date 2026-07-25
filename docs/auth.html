@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auth & mTLS — routsi docs</title>
+<meta name="description" content="Bearer tokens, mutual TLS, and secret layering via .env files.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<div class="bg"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="dot"></span>routsi</a>
+    <div class="nav-links">
+      <a href="../index.html#compare">Compare</a>
+      <a href="../index.html#who">Who it's for</a>
+      <a href="index.html">Docs</a>
+      <button class="themebtn" id="theme" aria-label="Toggle theme">◑</button>
+      <a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<div class="docshell">
+  <aside class="sidebar">
+    <div class="grp">
+      <h4>Start here</h4>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install</a>
+      <a href="quickstart.html">Quick start</a>
+      <a href="concepts.html">Core concepts</a>
+    </div>
+    <div class="grp">
+      <h4>Configure</h4>
+      <a href="configuration.html">models.yaml</a>
+      <a href="routing.html">Routing &amp; stickiness</a>
+      <a href="agents.html">Agents as models</a>
+      <a href="workers.html">Pull-workers</a>
+    </div>
+    <div class="grp">
+      <h4>Operate</h4>
+      <a href="auth.html" class="active">Auth &amp; mTLS</a>
+      <a href="dashboard.html">Dashboard &amp; metrics</a>
+      <a href="api.html">HTTP API</a>
+    </div>
+    <div class="grp">
+      <h4>Recipes</h4>
+      <a href="scenarios.html">Scenarios</a>
+    </div>
+  </aside>
+
+  <main class="doc-main">
+    <h1>Auth &amp; mTLS</h1>
+    <p class="lede">Generate tokens or a full certificate trust chain with the CLI, then flip it on in config.</p>
+
+    <h2 id="generate">Generate</h2>
+    <div class="code"><div class="top"><span>generate</span><button class="copy">copy</button></div><pre>routsi token -n 2      # prints rtk_… bearer tokens + setup notes
+routsi certs           # → ~/.config/routsi/certs/ (CA + server + client, keys 0600)</pre></div>
+
+    <h2 id="config">Config</h2>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>auth:
+  tokens_env: ROUTSI_TOKENS    # export ROUTSI_TOKENS="tok1,tok2"
+tls:
+  cert: server.crt             # cert + key ⇒ HTTPS
+  key: server.key
+  client_ca: clients-ca.crt    # + client_ca ⇒ mutual TLS (client certs required)</pre></div>
+    <p>With tokens on, <code>/v1/*</code>, <code>/stats</code> and <code>/metrics</code> require <code>Authorization: Bearer &lt;tok&gt;</code> (OpenAI SDKs send it as the api_key); the dashboard opens at <code>/?token=…</code>. <code>/health</code> stays open. Token values live in env vars — never in the config file.</p>
+    <p>Full end-to-end walk-through (curl 401→200, Python SDK, dashboard): <a class="link" href="scenarios.html#auth">Scenarios → Token-based auth</a>. mTLS walk-through: <a class="link" href="scenarios.html#mtls">Scenarios → mTLS</a>.</p>
+
+    <h2 id="secrets">Secrets via <code>.env</code></h2>
+    <p>On startup routsi layers environment variables from several sources so provider keys and <code>ROUTSI_TOKENS</code> can live wherever suits you. Precedence, highest first:</p>
+    <ol>
+      <li><strong>Process environment</strong> — whatever your shell / service already exports (always wins).</li>
+      <li><strong>An explicit env file</strong> — <code>-env &lt;path&gt;</code> flag or <code>ROUTSI_ENV_FILE</code>.</li>
+      <li><strong><code>./.env</code></strong> — in the working directory.</li>
+      <li><strong><code>~/.config/routsi/.env</code></strong> — the per-user default.</li>
+    </ol>
+    <p>A file never overrides a variable already set by a higher source, and values are never logged.</p>
+    <div class="code"><div class="top"><span>~/.config/routsi/.env</span><button class="copy">copy</button></div><pre>OPENAI_API_KEY=sk-...
+DEEPSEEK_API_KEY=...
+ROUTSI_TOKENS=rtk_...,rtk_...</pre></div>
+    <div class="callout warn">Keep this file private (<code>chmod 600</code>) and out of version control. routsi references keys by <b>env-var name</b> in <code>models.yaml</code> — the values only ever live in the environment or this file.</div>
+
+    <p style="margin-top:44px"><a class="btn btn-ghost" href="dashboard.html">Next: Dashboard &amp; metrics →</a></p>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>routsi</div>
+    <div><a href="../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div>
+  </div>
+</footer>
+
+<script>
+const root=document.documentElement,tb=document.getElementById('theme');
+const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;
+tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t);};
+document.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{const pre=b.closest('.code').querySelector('pre');navigator.clipboard.writeText(pre.innerText).then(()=>{const o=b.textContent;b.textContent='copied ✓';setTimeout(()=>b.textContent=o,1400);});});
+// scroll-spy: highlight in-page anchors only (cross-page sidebar links are untouched)
+const links=[...document.querySelectorAll('.sidebar a[href^="#"]')];
+const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const so=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active');}}),{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.doc-main h2[id]').forEach(h=>so.observe(h));
+</script>
+</body>
+</html>
