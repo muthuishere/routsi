@@ -144,6 +144,19 @@ contract. Table-driven tests in `internal/router/external_test.go` cover: high l
 malformed/empty output, unknown level, non-zero exit, timeout (all fall back to the
 `Rules` decision for that input) — `go vet ./...` + `go test ./...` green.
 
+## 2026-07-25 — agent-driven pull-worker helpers
+
+Added `routsi worker register|poll|answer` (in `cmd/routsi/worker.go`, dispatched from
+`cmd/routsi/skills.go`'s `worker()`) so a *running* agent session (Claude Code/codex) can
+become a pull-worker itself — register once, then poll/answer turn by turn, answering with
+its own reasoning instead of shelling to a subprocess. `run`/`scaffold` unchanged. Fixed a
+pre-existing off-by-one in `worker()`'s sub-verb dispatch (`os.Args[2]` → `os.Args[1]`,
+since `main()` already strips the top-level `worker` arg) — `routsi worker scaffold` was
+silently falling through to `run` before this fix. Rewrote
+`cmd/routsi/skills/routsi-worker/SKILL.md` to teach the agent-driven loop as the primary
+flow (Mode A) with the headless subprocess (`worker run --agent`) as Mode B. Additive only;
+`internal/server`, `internal/queue` untouched.
+
 ## Current state (2026-07-23)
 
 Phase 1 built and tested: routing (`auto` + rules), bypass, stickiness with

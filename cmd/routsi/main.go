@@ -75,6 +75,9 @@ usage:
   routsi install  --skills        install the agent skill(s) into ~/.claude, ~/.codex
   routsi worker   run  --proxy URL --queue NAME --agent 'cmd'   run a pull-worker
   routsi worker   scaffold        print an editable curl worker script
+  routsi worker   register --proxy URL --queue NAME             one-shot register
+  routsi worker   poll --proxy URL --queue NAME [-wait 25]       one long-poll, prints a job or nothing
+  routsi worker   answer --proxy URL --queue NAME --id ID [-text '...']  answer a job (stdin or -text)
   routsi uninstall                remove the service
   routsi status                   is the service running?
   routsi token [-n count]         generate API bearer tokens for auth.tokens_env

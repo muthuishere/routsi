@@ -133,7 +133,27 @@ dashboard Workers panel. If no worker is live, requests fast-fail with `503`. No
 auth in v1 (reserved `workers.auth` config placeholder). `routsi worker scaffold` prints
 an editable curl-only version.
 
-Install the worker as an **agent skill** so any agent session can become a worker:
+**Two ways to serve a queue:**
+
+- **Headless subprocess** (above) — `routsi worker run --agent 'cmd'` shells each
+  question to `cmd` and posts back its stdout.
+- **Agent-driven** — a *running* agent session (Claude Code, codex, opencode) becomes the
+  worker itself and answers with its own reasoning, no subprocess in the middle, using
+  three helper subcommands that share the same register/poll/answer flags:
+
+  ```sh
+  routsi worker register --proxy URL --queue NAME             # one-shot register
+  routsi worker poll --proxy URL --queue NAME --wait 25        # one long-poll; prints a job or nothing
+  printf '%s' "the answer" | routsi worker answer --proxy URL --queue NAME --id JOBID
+  ```
+
+  `poll` prints `{"id","prompt","messages"}` for one job and exits 0, or prints nothing on
+  an idle wait window (also exit 0) — an agent loops register once, then poll → compose the
+  answer itself → answer, repeating until told to stop.
+
+Install the worker as an **agent skill** so any agent session can become a worker — the
+skill walks the agent through the agent-driven loop above (and documents the headless
+mode as an alternative):
 
 ```sh
 routsi install --skills     # into ~/.claude/skills and ~/.codex/skills

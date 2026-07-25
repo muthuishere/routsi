@@ -75,19 +75,29 @@ func copyEmbeddedSkills(root string) error {
 	})
 }
 
-// worker dispatches `routsi worker <run|scaffold>`.
+// worker dispatches `routsi worker <run|scaffold|register|poll|answer>`.
+//
+// By the time this runs, main() has already stripped the top-level "worker"
+// arg (os.Args[1] used to be "worker"; after the strip it's the sub-verb, e.g.
+// "run"/"register"), so the sub-verb lives at os.Args[1], not os.Args[2].
 func worker() {
 	sub := "run"
-	if len(os.Args) > 2 && os.Args[2] != "" && os.Args[2][0] != '-' {
-		sub = os.Args[2]
+	if len(os.Args) > 1 && os.Args[1] != "" && os.Args[1][0] != '-' {
+		sub = os.Args[1]
 	}
 	switch sub {
 	case "run":
 		runWorker()
 	case "scaffold":
 		scaffoldWorker()
+	case "register":
+		workerRegisterCmd()
+	case "poll":
+		workerPollCmd()
+	case "answer":
+		workerAnswerCmd()
 	default:
-		fmt.Fprintf(os.Stderr, "usage: routsi worker <run|scaffold>\n")
+		fmt.Fprintf(os.Stderr, "usage: routsi worker <run|scaffold|register|poll|answer>\n")
 		os.Exit(2)
 	}
 }

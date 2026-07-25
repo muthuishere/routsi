@@ -1,141 +1,134 @@
 ---
 name: routsi-worker
 description: >
-  Turn any AI coding agent (opencode, codex, Claude Code, or a custom script) into a routsi
-  worker: register a named queue with a routsi proxy, long-poll for questions, answer each one
-  with your own locally logged-in agent, and post the answer back. The proxy becomes a broker and
-  routes matching requests to your queue; your credentials never leave your machine (outbound-only,
-  NAT-friendly). Use when the user says "join a routsi proxy as a worker", "supply answers to
-  routsi", "register my agent with routsi", "run a routsi worker", "let my codex/claude/opencode
-  serve routsi requests", or "become a routsi provider".
+  Become a routsi worker: register a named queue with a routsi proxy and answer the questions it
+  routes to you. TWO modes — (A) THIS agent session answers with its own reasoning, driving the
+  register/poll/answer loop itself turn by turn (the point of this skill), or (B) a headless
+  subprocess loop (`routsi worker run --agent 'cmd'`) shells each question to another command.
+  Use when the user says "become a routsi worker", "join a routsi proxy as a worker", "supply
+  answers to routsi", "let my claude/codex/opencode answer routsi requests", "register my agent
+  with routsi", "run a routsi worker", or "become a routsi provider".
 ---
 
-# routsi-worker — turn your agent into a routsi provider
+# routsi-worker — turn this agent session into a routsi provider
 
-routsi is an OpenAI-compatible proxy. A **worker** lets *your* logged-in agent answer requests
-that the proxy routes to a named **queue** — without installing or logging in anything on the
-proxy host. You run one loop on your own machine; the proxy pushes questions to it, you answer
-with your local agent.
+routsi is an OpenAI-compatible proxy. A **worker** lets an agent answer requests that the proxy
+routes to a named **queue** — without installing or logging in anything on the proxy host. The
+proxy pushes questions to your queue; you answer with your own agent, right where it's already
+logged in.
 
-This skill wraps the built-in CLI command **`routsi worker run`**. That's the whole thing:
+## Two modes — pick one
 
-```sh
-routsi worker run --proxy https://PROXY:8080 --queue QUEUE_NAME --agent 'AGENT_CMD'
-```
+- **(A) Agent-driven loop (this skill's main flow, below).** *You* — the running Claude
+  Code/codex/opencode session — register a queue, poll for jobs yourself, compose each answer
+  with your own reasoning, and post it back. No subprocess in the middle; the model answering is
+  this very session. This is the point of this skill.
+- **(B) Headless subprocess loop.** `routsi worker run --proxy URL --queue NAME --agent 'cmd'`
+  runs a standalone loop that shells each question's prompt to `cmd` on stdin and posts back
+  whatever `cmd` prints on stdout. Use this when you want a fire-and-forget process (e.g. in a
+  systemd unit or tmux pane) rather than an interactive agent session driving it turn by turn.
+  See `routsi worker scaffold` for a pure-curl version of the same loop.
 
-It registers the queue once, long-polls the proxy for questions, pipes each question to
-`AGENT_CMD` on **stdin**, and posts `AGENT_CMD`'s **stdout** back as the answer. The moment the
-queue registers it becomes a routable model named after the queue (visible in `/v1/models`), so
-anyone hitting the proxy with `model: "QUEUE_NAME"` reaches you.
+Both modes share the same proxy contract: register a queue name once; it becomes a routable model
+(`{"model":"QUEUE_NAME"}` reaches you); one worker per queue; non-streaming (a whole answer per
+question); no worker auth in v1.
 
-## How it works (the contract)
+Installed via `routsi install --skills` into `~/.claude/skills` and `~/.codex/skills` — invoke it
+in any agent session with a matching request (see the trigger phrases above).
 
-1. **Register** the queue with the proxy (idempotent).
-2. **Long-poll** for the next question.
-3. On a question, render it to a prompt and pipe it to `AGENT_CMD` on **stdin**.
-4. Capture `AGENT_CMD`'s **stdout** and **post it back** as the answer.
-5. Repeat.
+## Mode A — the agent-driven loop (do this yourself, step by step)
 
-The only requirement on your agent: **it must read the question from stdin and print the answer
-to stdout.** Any tool that does that works.
+You need the **`routsi`** binary on PATH (`routsi version` to confirm) and a proxy URL that's
+reachable (outbound HTTPS only — no inbound ports needed on your side).
 
-> v1 notes: **no worker auth** (a `--token` flag is accepted but ignored — reserved for later).
-> Non-streaming (a whole answer is returned per question). **One worker per queue** — pick a
-> unique queue name.
+### 1. Determine the proxy URL and a queue name
 
-## Prereqs
+Ask the user if either is unknown. Default proxy: `http://localhost:8080` (or whatever the user
+has running). Pick a **unique, descriptive queue name** — convention `<who>-<agent>`, e.g.
+`alice-claude`, `muthu-codex`. It must not collide with an existing queue or a configured model.
 
-- The **`routsi`** binary on your PATH (`routsi version` to confirm).
-- Your **agent CLI installed and logged in** (e.g. `codex`, `claude`, `opencode`) — the worker
-  reuses whatever session that CLI already has. routsi does not log in for you.
-- Network reach to the proxy (outbound HTTPS only — no inbound ports on your side).
-
-## Start it (the one-liner)
-
-Pick a **unique, descriptive queue name** — it's how the proxy addresses you, and it must not
-collide with an existing queue or a configured model. Convention: `<who>-<agent>`, e.g.
-`alice-codex`, `muthu-claude`, `team-opencode`.
-
-### codex
+### 2. Register
 
 ```sh
-routsi worker run \
-  --proxy https://PROXY:8080 \
-  --queue alice-codex \
-  --agent 'codex exec --skip-git-repo-check -'
+routsi worker register --proxy <URL> --queue <NAME>
 ```
 
-### Claude Code
+Prints `registered ✓  queue="<NAME>" on <URL>` on success; non-zero exit + a clear stderr message
+on failure (e.g. name collision — pick a different name and retry).
+
+### 3. Loop until the user says stop
+
+**a. Poll for a job:**
 
 ```sh
-routsi worker run \
-  --proxy https://PROXY:8080 \
-  --queue alice-claude \
-  --agent 'claude -p'
+routsi worker poll --proxy <URL> --queue <NAME> --wait 25
 ```
 
-### opencode
+- If a job is waiting, this prints **one JSON line** to stdout and exits 0:
+  `{"id":"<jobid>","prompt":"<last user message text>","messages":[...the full messages array...]}`
+- If nothing arrives within the wait window, it prints **nothing** and exits 0 — just poll again
+  (go back to step a).
+- A non-zero exit means a network/HTTP error — report it and retry after a short pause.
+
+**b. On a job: compose the answer yourself.** Read `prompt` (or the full `messages` array for more
+context) and **reason about it as you would any question put to you directly** — this is the whole
+point of Mode A: the model answering is this session, not a subprocess. Do not shell the prompt to
+another agent/CLI; answer it with your own judgment, tools, and context.
+
+**c. Send the answer back:**
 
 ```sh
-routsi worker run \
-  --proxy https://PROXY:8080 \
-  --queue alice-opencode \
-  --agent 'opencode run -'
+printf '%s' "<your answer>" | routsi worker answer --proxy <URL> --queue <NAME> --id <jobid>
 ```
 
-### Trivial echo test (no agent needed — proves the loop end-to-end)
+`routsi worker answer` reads the answer text from **stdin** (or use `--text '...'` instead of
+piping). Prints a short confirmation on success; non-zero exit + stderr on failure (e.g. the job
+expired or was already answered — just go back to polling).
 
-Any command that reads stdin and prints something works. `cat` just echoes the question back:
+**d. Repeat from step a.**
+
+### 4. Stopping
+
+There's no special stop command — just stop looping. If you're driving this yourself turn by
+turn, stop when the user tells you to. If you scripted the loop (e.g. a shell `while` around the
+three commands), Ctrl-C ends it; the proxy fast-fails new requests to that queue once you stop
+polling (no cleanup needed on your end).
+
+## Mode B — headless subprocess (for when you want a fire-and-forget process instead)
 
 ```sh
-routsi worker run \
-  --proxy https://PROXY:8080 \
-  --queue test-echo \
-  --agent 'cat'
+routsi worker run --proxy <URL> --queue <NAME> --agent 'claude -p'    # or 'codex exec --skip-git-repo-check -', 'opencode run -', 'cat' (echo test)
 ```
 
-Then send a request to the proxy with `model: "test-echo"` and you'll get the question back as
-the answer. Good first smoke test before wiring a real agent.
-
-### Custom script
-
-Anything on PATH that reads stdin and writes stdout:
-
-```sh
-routsi worker run --proxy https://PROXY:8080 --queue alice-bot --agent './answer.sh'
-```
-
-where `answer.sh` reads the prompt on stdin and prints the reply.
+This is the same register → poll → answer loop as Mode A, but built into one command: it pipes
+each question's prompt to `AGENT_CMD` on stdin and posts `AGENT_CMD`'s stdout back as the answer.
+Good for a non-interactive process; the model reasoning happens in whatever `AGENT_CMD` is, not in
+this skill's session. `routsi worker scaffold` prints an editable pure-curl version of the same
+loop for anyone who'd rather not use the built-in command.
 
 ## Verify you're live
 
-- **From the proxy dashboard:** open the proxy root (`https://PROXY:8080/`) — your queue shows
-  up as a registered worker / routable model.
-- **Over HTTP:** `curl https://PROXY:8080/v1/workers` (or `GET /v1/models`) — your queue name
-  appears in the list.
+- **From the proxy dashboard:** open the proxy root (`<URL>/`) — your queue shows up as a
+  registered worker / routable model.
+- **Over HTTP:** `curl <URL>/v1/workers` (or `GET /v1/models`) — your queue name appears.
 - **Send a real request** to the proxy with your queue as the model:
   ```sh
-  curl https://PROXY:8080/v1/chat/completions \
+  curl <URL>/v1/chat/completions \
     -H 'Content-Type: application/json' \
-    -d '{"model":"alice-codex","messages":[{"role":"user","content":"hello"}]}'
+    -d '{"model":"<NAME>","messages":[{"role":"user","content":"hello"}]}'
   ```
-  The proxy routes it to your queue, your agent answers, and the reply comes back in OpenAI
-  wire format. The worker also prints human status per job (`registered ✓`, `answered job … (1.2s)`).
+  The proxy routes it to your queue; in Mode A, your poll picks it up next and you answer it
+  yourself; the reply comes back in OpenAI wire format.
 
 ## Troubleshooting
 
-- **Queue name collision / "one worker per queue".** In v1 a queue is served by a single
-  worker. If your name is already taken (or reserved by a configured model), pick a different,
-  more specific name (`alice-codex-2`, `alice-laptop-codex`).
-- **Proxy unreachable / connection refused.** Check the `--proxy` URL and port, that the proxy
-  is running, and that you can reach it (`curl https://PROXY:8080/health`). The worker connects
-  outbound only — no inbound ports needed on your side, but egress to the proxy must be open.
-- **Empty or garbage answers → your agent command is wrong.** `AGENT_CMD` **must read the
-  question from stdin and print only the answer to stdout.** Test it standalone first:
-  `echo 'what is 2+2?' | codex exec --skip-git-repo-check -` should print an answer. If your CLI
-  needs a flag to read stdin (a trailing `-`, `--stdin`, etc.), add it. Diagnostics printed to
-  stderr are fine; anything on stdout becomes the answer.
-- **Agent not logged in.** The worker reuses your CLI's existing session — if the agent CLI
-  isn't authenticated, log it in first (run it once interactively), then start the worker.
-- **Requests time out with no answer.** If no worker is polling a queue, the proxy fast-fails
-  that queue. Make sure the worker is running and registered (see *Verify you're live*).
+- **Queue name collision / "one worker per queue".** A queue is served by a single worker in v1.
+  If your name is taken (or reserved by a configured model), pick a different, more specific name.
+- **Proxy unreachable / connection refused.** Check the `--proxy` URL/port and that you can reach
+  it (`curl <URL>/health`). Outbound only — no inbound ports needed on your side.
+- **`worker poll` keeps printing nothing.** That's normal idle behavior — just keep polling. It
+  only means no request has arrived for your queue yet.
+- **`worker answer` fails with a conflict/expired error.** The job likely already timed out or was
+  answered — this is not fatal, just go back to polling for the next one.
+- **Requests to your queue time out with 503.** No worker is currently polling — make sure you (or
+  your Mode B subprocess) are actively looping register → poll → answer.
