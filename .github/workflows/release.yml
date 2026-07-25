@@ -101,9 +101,17 @@ jobs:
           generate_release_notes: true
 
   publish-npm:
-    name: publish to npm
+    name: publish to npm (OIDC trusted publishing)
     needs: release
     runs-on: ubuntu-latest
+    # Dormant until you opt in: set repo variable NPM_OIDC=true AFTER you've
+    # (1) published @muthuishere/routsi once manually and (2) configured a
+    # Trusted Publisher for this repo+workflow on npmjs.com. Until then the
+    # GitHub Release still publishes; only this npm step is skipped.
+    if: vars.NPM_OIDC == 'true'
+    permissions:
+      id-token: write # required for npm OIDC + provenance
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -112,18 +120,17 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
+      # OIDC trusted publishing needs npm >= 11.5.1 (Node 20 ships npm 10).
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: Set package version from tag
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           npm version --no-git-tag-version --allow-same-version "${VERSION}"
 
-      - name: Publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "${NODE_AUTH_TOKEN}" ]; then
-            echo "::warning::NPM_TOKEN secret not set — skipping npm publish. Add it in repo Settings > Secrets to enable publishing."
-            exit 0
-          fi
-          npm publish --access public
+      # No NODE_AUTH_TOKEN: auth comes from the OIDC id-token; provenance is
+      # attached automatically because id-token: write is granted above.
+      - name: Publish (tokenless via OIDC)
+        run: npm publish --access public --provenance
