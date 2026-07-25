@@ -95,26 +95,28 @@
 <!-- comparison -->
 <section id="compare" class="wrap">
   <div class="sec-head reveal">
-    <div class="kicker">Not another gateway</div>
+    <div class="kicker">A different job, not a replacement</div>
     <h2>Gateways swap providers. routsi swaps answerers.</h2>
-    <p>LiteLLM, OpenRouter and Portkey route between providers serving the <em>same</em> model. routsi routes between fundamentally different answerers — and picks per task.</p>
+    <p>LiteLLM, OpenRouter and Portkey are mature, powerful gateways — hundreds of providers, load-balancing, spend tracking, caching, guardrails, deep observability. If you need those, use them. routsi doesn't replace them; it does one thing they don't: route each request across <em>fundamentally different answerers</em> — API models <em>and</em> full agents — choosing per task.</p>
   </div>
   <div class="cmp-scroll reveal">
     <table class="cmp">
-      <colgroup><col><col class="hl"><col><col></colgroup>
-      <thead><tr><th>Capability</th><th class="hl">routsi</th><th>LiteLLM / OpenRouter</th><th>Raw OpenAI</th></tr></thead>
+      <colgroup><col><col class="hl"><col></colgroup>
+      <thead><tr><th>Capability</th><th class="hl">routsi</th><th>Gateways (LiteLLM / OpenRouter / Portkey)</th></tr></thead>
       <tbody>
-        <tr><td>Route between <b>models AND full agents</b></td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td><td class="c"><span class="no">✗</span></td></tr>
-        <tr><td>Pick the answerer <b>per task</b>, automatically</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td><td class="c"><span class="no">✗</span></td></tr>
-        <tr><td>Agent sessions as models (Devin/Codex resume)</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td><td class="c"><span class="no">✗</span></td></tr>
-        <tr><td>Sticky per conversation, escalate-only</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="mid">~</span></td><td class="c"><span class="no">✗</span></td></tr>
-        <tr><td>Bring-your-own remote workers (outbound-only)</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td><td class="c"><span class="no">✗</span></td></tr>
-        <tr><td>Provider load-balance &amp; fallback</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td></tr>
-        <tr><td>Self-hosted single binary, no platform</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="mid">~</span></td><td class="c"><span class="no">n/a</span></td></tr>
+        <tr><td>Route across API models <b>and full agents</b> (Devin/Codex/…)</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td></tr>
+        <tr><td>Pick the answerer <b>per task</b>, automatically</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td></tr>
+        <tr><td>Agent <b>sessions</b> as models (resume Devin/Codex)</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td></tr>
+        <tr><td>Bring-your-own remote worker (outbound-only)</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="no">✗</span></td></tr>
+        <tr><td>Hundreds of providers/models out of the box</td><td class="c hl"><span class="mid">~</span></td><td class="c"><span class="yes">✓</span></td></tr>
+        <tr><td>Load-balance, retries, fallback across providers</td><td class="c hl"><span class="mid">~</span></td><td class="c"><span class="yes">✓</span></td></tr>
+        <tr><td>Spend tracking, budgets, rate limits, caching</td><td class="c hl"><span class="no">✗</span></td><td class="c"><span class="yes">✓</span></td></tr>
+        <tr><td>Deep observability / analytics</td><td class="c hl"><span class="mid">~</span> <span style="color:var(--fg-mute);font-size:12px">basic</span></td><td class="c"><span class="yes">✓</span></td></tr>
+        <tr><td>Single self-hosted binary, no external deps</td><td class="c hl"><span class="yes">✓</span></td><td class="c"><span class="mid">~</span></td></tr>
       </tbody>
     </table>
   </div>
-  <p class="cmp-note reveal">✓ built-in · ~ partial / depends · ✗ not a goal. routsi complements a gateway — it can even forward to one.</p>
+  <p class="cmp-note reveal">✓ built-in · ~ basic / partial · ✗ not a goal. Different tools for different jobs — many people run routsi <b>in front of</b> a gateway.</p>
 </section>
 
 <!-- who it's for -->

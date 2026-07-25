@@ -178,7 +178,7 @@ footer a{color:var(--fg-dim)}footer a:hover{color:var(--fg)}
 @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
 
 /* ============ DOCS layout ============ */
-.docshell{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:248px 1fr;gap:40px;padding:36px 24px 80px}
+.docshell{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:248px 1fr;gap:52px;padding:44px 32px 96px}
 @media(max-width:900px){.docshell{grid-template-columns:1fr;gap:20px}}
 .sidebar{position:sticky;top:84px;align-self:start;font-size:14.5px;max-height:calc(100vh - 100px);overflow:auto}
 @media(max-width:900px){.sidebar{position:static;max-height:none;border:1px solid var(--line);border-radius:var(--radius);padding:16px;background:var(--panel)}}
