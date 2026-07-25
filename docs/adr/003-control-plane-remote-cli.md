@@ -1,6 +1,9 @@
 # ADR-003: Control plane & remote CLI
 
-- **Status:** Proposed (discussion)
+- **Status:** Parked (2026-07-25) — owner scoped to additive only; a general
+  add/remove-any-provider control plane is **out of scope for now**. The *only* runtime
+  registration we build is a worker joining its own queue (ADR-001), not a general admin
+  API. Kept for reference.
 - **Date:** 2026-07-25
 - **Depends on:** ADR-002 (registry as source of truth)
 

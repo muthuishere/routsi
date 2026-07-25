@@ -1,23 +1,25 @@
 # Architecture Decision Records
 
-One decision per file. Status: Proposed → Accepted → Superseded. No code embodying a
-Proposed decision is committed (see CLAUDE.md workflow).
+One decision per file. Status: Proposed → Accepted → Superseded/Parked. No code
+embodying a Proposed decision is committed (see CLAUDE.md workflow).
 
-## The "everything is a provider" arc (under huddle discussion, 2026-07-25)
+## Scope (owner, 2026-07-25): additive only
 
-Reframe: **the `Backend` interface already unifies what answers** (forward, agent,
-router, custom). The work is not a rewrite — it's adding a runtime registry, a control
-plane, and status around that interface. These ADRs split that work:
+**No architecture change.** Everything that works today stays. We only *add*: a way for
+remote workers to join and supply answers, a CLI capability to run one, and an agent
+skill so anyone can become a worker. The broader "unified registry + control plane"
+refactor is **parked** — not being built now.
 
-| ADR | Title | Role | Status |
-|-----|-------|------|--------|
-| [002](002-unified-provider-model.md) | Unified provider model | the spine — everything is a registered Provider with a kind + state | Proposed |
-| [001](001-pull-worker-queue.md) | Pull-worker queue | first new provider *kind*: remote agent answers via broker | Proposed |
-| [004](004-provider-status-health.md) | Provider status & health | makes providers trustworthy (state, heartbeat, failure surfacing) | Proposed |
-| [003](003-control-plane-remote-cli.md) | Control plane & remote CLI | distribution: add/remove providers on a running proxy from anywhere | Proposed |
-| [005](005-agent-skill-worker.md) | Agent-skill worker | the loop that turns opencode/codex/claude into a provider | Proposed |
+| ADR | Title | Status | In scope? |
+|-----|-------|--------|-----------|
+| [001](001-pull-worker-queue.md) | Pull-worker queue | Proposed | ✅ the broker so workers can answer |
+| [005](005-agent-skill-worker.md) | Agent-skill worker | Proposed | ✅ CLI `routsi worker` + the agent skill |
+| [004](004-provider-status-health.md) | Provider status & health | Proposed | ➖ **minimal slice only** — worker liveness + failure visibility for the new queue path |
+| [002](002-unified-provider-model.md) | Unified provider model | **Parked** | ❌ architecture refactor — not now |
+| [003](003-control-plane-remote-cli.md) | Control plane & remote CLI | **Parked** | ❌ general admin API — not now |
 
-Likely **accept + build order**: 002 → 001 → 004 → 003 → 005 (Maya's sequencing;
-Babu's "prove the worker case before generalizing").
+Live work = **001 + 005 + a minimal 004** (worker status only). The pull-worker is added
+as a plain `Backend` + config `type`, plus one dynamic-register endpoint so a worker can
+join without editing config — nothing else in the proxy changes.
 
-Grounding evidence: [`docs/research/`](../research/). Spikes: [`docs/spikes/`](../spikes/).
+Grounding: [`docs/research/`](../research/). Spike: [`docs/spikes/`](../spikes/).

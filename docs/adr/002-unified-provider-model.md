@@ -1,6 +1,10 @@
 # ADR-002: Unified provider model ("everything is a worker")
 
-- **Status:** Proposed (discussion)
+- **Status:** Parked (2026-07-25) — owner scoped the work to **additive only, no
+  architecture change**: just add the pull-worker capability + CLI + agent skill. The
+  registry/refactor here is **not being done now**. Kept for reference if the fabric
+  vision returns later. The pull-worker (ADR-001) is added as a plain `Backend`/config
+  model type, *without* this refactor.
 - **Date:** 2026-07-25
 - **Supersedes intent of:** ad-hoc per-kind wiring in `server.New`
 
