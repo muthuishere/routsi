@@ -17,7 +17,7 @@ routsi serve                     # listens on :8080 by default
 ### Install via npm
 
 ```sh
-npm install -g routsi
+npm install -g @muthuishere/routsi
 ```
 
 `postinstall` downloads the prebuilt `routsi` binary for your OS/arch from [GitHub

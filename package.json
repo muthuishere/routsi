@@ -1,5 +1,5 @@
 {
-  "name": "routsi",
+  "name": "@muthuishere/routsi",
   "version": "0.1.0",
   "description": "OpenAI-compatible dynamic LLM router — a single Go binary, installed via npm as a prebuilt native binary",
   "license": "MIT",
