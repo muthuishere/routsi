@@ -160,6 +160,12 @@ tls:
   key: server.key
   client_ca: clients-ca.crt    # + client_ca ⇒ mutual TLS (client certs required)</pre></div>
     <p>With tokens on, <code>/v1/*</code>, <code>/stats</code> and <code>/metrics</code> require <code>Authorization: Bearer &lt;tok&gt;</code> (OpenAI SDKs send it as the api_key); the dashboard opens at <code>/?token=…</code>. <code>/health</code> stays open. Token values live in env vars — never in the config file.</p>
+    <h3>Secrets via <code>.env</code></h3>
+    <p>On startup routsi loads <code>~/.config/routsi/.env</code> into its process environment, so provider keys and <code>ROUTSI_TOKENS</code> can live there instead of your shell profile. Your existing shell/service environment always wins over the file, and values are never logged.</p>
+    <div class="code"><div class="top"><span>~/.config/routsi/.env</span><button class="copy">copy</button></div><pre>OPENAI_API_KEY=sk-...
+DEEPSEEK_API_KEY=...
+ROUTSI_TOKENS=rtk_...,rtk_...</pre></div>
+    <div class="callout warn">Keep this file private (<code>chmod 600</code>) and out of version control. routsi references keys by <b>env-var name</b> in <code>models.yaml</code> — the values only ever live in the environment or this file.</div>
 
     <h2 id="dashboard">Dashboard &amp; metrics</h2>
     <ul>
