@@ -51,6 +51,17 @@
     <div class="grp">
       <h4>Recipes</h4>
       <a href="scenarios/index.html">Scenarios</a>
+      <div class="sub">
+        <a href="scenarios/auto-routing.html">Auto routing</a>
+        <a href="scenarios/concrete-bypass.html">Concrete bypass</a>
+        <a href="scenarios/token-auth.html">Token auth</a>
+        <a href="scenarios/mtls.html">mTLS</a>
+        <a href="scenarios/agent-session.html">Agent session</a>
+        <a href="scenarios/pull-worker.html">Pull-worker</a>
+        <a href="scenarios/streaming-heartbeat.html">Streaming + heartbeat</a>
+        <a href="scenarios/dynamic-group.html">Dynamic group</a>
+        <a href="scenarios/env-secrets.html">.env secrets</a>
+      </div>
     </div>
   </aside>
 
@@ -59,12 +70,13 @@
     <p class="lede">routsi ships as a single binary. Three ways to get it — pick one.</p>
 
     <h2 id="npm">npm (recommended)</h2>
-    <p>The npm package's <code>postinstall</code> downloads the right prebuilt binary for your OS/arch from GitHub Releases — no Go toolchain, no building from source.</p>
+    <p>There's a single scoped package, <code>@muthuishere/routsi</code> — not one per OS/arch. It downloads a <strong>prebuilt native binary</strong> from GitHub Releases; it never builds from source, so no Go toolchain is required.</p>
     <div class="code"><div class="top"><span>install globally</span><button class="copy">copy</button></div><pre>npm install -g @muthuishere/routsi
 routsi version</pre></div>
+    <p><code>postinstall</code> does a <strong>best-effort prefetch</strong> of the right binary for your OS/arch right after <code>npm install</code>. The launcher is <strong>self-healing</strong>: if that prefetch was skipped or failed — <code>--ignore-scripts</code>, an <code>allow-scripts</code> policy, or simply being offline at install time — the very first <code>routsi</code> invocation fetches the binary itself before running. Either way, one package, one command, and it always ends up working; nothing is left half-installed.</p>
 
     <h2 id="release">Prebuilt release binary</h2>
-    <p>Grab the archive for your platform from the <a class="link" href="https://github.com/muthuishere/routsi/releases" target="_blank" rel="noopener">releases page</a>, unpack, and put <code>routsi</code> on your <code>PATH</code>.</p>
+    <p>Skip npm entirely: grab the archive for your platform from the <a class="link" href="https://github.com/muthuishere/routsi/releases" target="_blank" rel="noopener">releases page</a>, unpack, and put <code>routsi</code> on your <code>PATH</code>. This is the same binary the npm package downloads for you — useful for air-gapped installs or when you'd rather manage the binary yourself.</p>
 
     <h2 id="source">From source</h2>
     <div class="code"><div class="top"><span>Go 1.22+ · Taskfile v3</span><button class="copy">copy</button></div><pre>git clone https://github.com/muthuishere/routsi &amp;&amp; cd routsi

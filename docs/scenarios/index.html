@@ -51,13 +51,25 @@
     <div class="grp">
       <h4>Recipes</h4>
       <a href="index.html" class="active">Scenarios</a>
+      <div class="sub">
+        <a href="auto-routing.html">Auto routing</a>
+        <a href="concrete-bypass.html">Concrete bypass</a>
+        <a href="token-auth.html">Token auth</a>
+        <a href="mtls.html">mTLS</a>
+        <a href="agent-session.html">Agent session</a>
+        <a href="pull-worker.html">Pull-worker</a>
+        <a href="streaming-heartbeat.html">Streaming + heartbeat</a>
+        <a href="dynamic-group.html">Dynamic group</a>
+        <a href="env-secrets.html">.env secrets</a>
+      </div>
     </div>
   </aside>
 
   <main class="doc-main">
     <h1>Scenarios</h1>
     <p class="lede">Copy-paste, end-to-end recipes. Each one runs against a real proxy — no hand-waving.</p>
-    <div class="callout">These scenarios mirror the repo's integration tests (<code>internal/server/scenarios_test.go</code>) — same requests, same expected headers/status codes — so this page stays honest as the code changes.</div>
+    <p>A "scenario" here is a concrete, runnable request/response shape — not just prose. Most of these are backed one-to-one by an integration test in <code>internal/server/scenarios_test.go</code> (token auth, auto routing, concrete bypass, streaming heartbeat, pull-worker); dynamic-group routing and conversation-mapped agent sessions are covered by dedicated tests elsewhere in the suite (<code>server_test.go</code>, <code>backend/devin_test.go</code>). Same requests, same expected headers/status codes as the tests — this page stays honest as the code changes.</p>
+    <div class="callout">These scenarios mirror the repo's integration tests — same requests, same expected headers/status codes — so this page stays honest as the code changes.</div>
 
     <h2 id="list">Pick a scenario</h2>
     <ul>

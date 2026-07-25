@@ -50,13 +50,32 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="index.html" class="active">Scenarios</a>
+      <a href="index.html">Scenarios</a>
+      <div class="sub">
+        <a href="auto-routing.html">Auto routing</a>
+        <a href="concrete-bypass.html">Concrete bypass</a>
+        <a href="token-auth.html">Token auth</a>
+        <a href="mtls.html">mTLS</a>
+        <a href="agent-session.html">Agent session</a>
+        <a href="pull-worker.html">Pull-worker</a>
+        <a href="streaming-heartbeat.html">Streaming + heartbeat</a>
+        <a href="dynamic-group.html" class="active">Dynamic group</a>
+        <a href="env-secrets.html">.env secrets</a>
+      </div>
     </div>
   </aside>
 
   <main class="doc-main">
     <h1>8 · Dynamic group routing</h1>
     <p class="lede">Define a named group with levels; ask for the group name and let classification pick the member.</p>
+
+    <h2 id="what">What it is</h2>
+    <p>A <code>type: dynamic</code> catalog entry — a named virtual model (e.g. <code>dynamic-1</code>) with its own <code>levels: {low, medium, high}</code> map. Asking for the group name runs the same low/medium/high classifier as <code>auto</code>, but scoped to this group's own members instead of the global <code>tiers:</code> map. Pins are scoped per <code>convID#group</code>, escalate-only — independent of any other group's stickiness.</p>
+
+    <h2 id="why">Why</h2>
+    <p>Use this when you need more than one routing policy at once — e.g. a "support-bot" group and a "coding-agent" group, each escalating across their own set of models, rather than sharing the single global <code>auto</code> tiers. It's the same mechanism as <code>auto</code>, just named and repeatable.</p>
+
+    <h2 id="configure">Configure</h2>
     <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>- name: dynamic-1
   type: dynamic
   levels:
@@ -67,6 +86,9 @@
   -d '{"model":"dynamic-1","messages":[{"role":"user","content":"summarize this paragraph"}]}'
 # → X-Selected-Model: gpt-cheap (classified low)</pre></div>
     <p>Mechanics: <a class="link" href="../routing.html">Routing &amp; stickiness</a>. Classification rules: <a class="link" href="../auto-routing.html">How <code>auto</code> decides</a>.</p>
+
+    <h2 id="adapt">How to adapt</h2>
+    <p>To route a new tier to an agent, set <code>high: devin/claude-opus-4.8</code> (or any catalog name — a forward model, a discovered variant, a pull-worker queue) under <code>levels:</code> in the dynamic group. A missing level falls back to the nearest declared one (high → medium → low, and so on), so you can declare only <code>low</code>/<code>high</code> and skip <code>medium</code> if you don't need a middle tier. Members are validated against the catalog at server start (after discovery), so a typo'd or not-yet-discovered name fails fast rather than 500ing on first use. Nesting one dynamic group inside another is rejected.</p>
 
     <p style="margin-top:44px"><a class="btn btn-ghost" href="env-secrets.html">Next: Secrets via .env layering →</a></p>
   </main>

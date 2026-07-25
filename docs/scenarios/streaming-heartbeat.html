@@ -50,18 +50,41 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="index.html" class="active">Scenarios</a>
+      <a href="index.html">Scenarios</a>
+      <div class="sub">
+        <a href="auto-routing.html">Auto routing</a>
+        <a href="concrete-bypass.html">Concrete bypass</a>
+        <a href="token-auth.html">Token auth</a>
+        <a href="mtls.html">mTLS</a>
+        <a href="agent-session.html">Agent session</a>
+        <a href="pull-worker.html">Pull-worker</a>
+        <a href="streaming-heartbeat.html" class="active">Streaming + heartbeat</a>
+        <a href="dynamic-group.html">Dynamic group</a>
+        <a href="env-secrets.html">.env secrets</a>
+      </div>
     </div>
   </aside>
 
   <main class="doc-main">
     <h1>7 · Streaming with heartbeat</h1>
     <p class="lede"><code>"stream":true</code> gets normal SSE chunks plus <code>: ping</code> keep-alives on long turns; SDKs ignore the pings.</p>
+
+    <h2 id="what">What it is</h2>
+    <p>Standard OpenAI-shaped SSE streaming, plus periodic SSE <em>comment</em> lines (<code>: ping</code>, not a <code>data:</code> event) injected while an upstream — especially a slow CLI agent or a pull-worker — is still thinking and hasn't produced its next chunk yet.</p>
+
+    <h2 id="why">Why</h2>
+    <p>Idle proxies, load balancers, and some HTTP clients drop a connection that goes quiet for too long. A CLI agent turn can easily take longer than that idle timeout between real content chunks. The heartbeat keeps the connection alive without changing the response shape — SSE comment lines are invisible to any spec-compliant SSE/OpenAI client parser.</p>
+
+    <h2 id="configure">Configure</h2>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>stream_heartbeat: 15s   # default ~15s; 0 disables heartbeat comments entirely</pre></div>
     <div class="code"><div class="top"><span>stream a slow agent turn</span><button class="copy">copy</button></div><pre>curl -N localhost:8080/v1/chat/completions \
   -d '{"model":"devin/claude-opus-4.8","stream":true,
        "messages":[{"role":"user","content":"long task"}]}'
 # → data: {...} chunks, with ": ping" comment lines every ~15s while it thinks</pre></div>
     <p>The heartbeat interval is configurable via <code>stream_heartbeat</code> in <code>models.yaml</code>; the OpenAI SDK's SSE parser silently discards comment lines (anything starting with <code>:</code>), so no client code needs to change to tolerate it.</p>
+
+    <h2 id="adapt">How to adapt</h2>
+    <p>Tune <code>stream_heartbeat</code> to sit comfortably under whatever idle timeout sits in front of routsi (a corporate proxy, an ALB, nginx) — shorter if that timeout is aggressive, <code>0</code> to disable entirely if nothing in the path times out. This applies uniformly whether the upstream is a raw <code>forward</code> passthrough, a CLI agent (streaming is faked off its one-shot <code>Complete</code> call), or a pull-worker.</p>
 
     <p style="margin-top:44px"><a class="btn btn-ghost" href="dynamic-group.html">Next: Dynamic group routing →</a></p>
   </main>

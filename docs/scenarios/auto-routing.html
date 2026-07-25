@@ -50,13 +50,49 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="index.html" class="active">Scenarios</a>
+      <a href="index.html">Scenarios</a>
+      <div class="sub">
+        <a href="auto-routing.html" class="active">Auto routing</a>
+        <a href="concrete-bypass.html">Concrete bypass</a>
+        <a href="token-auth.html">Token auth</a>
+        <a href="mtls.html">mTLS</a>
+        <a href="agent-session.html">Agent session</a>
+        <a href="pull-worker.html">Pull-worker</a>
+        <a href="streaming-heartbeat.html">Streaming + heartbeat</a>
+        <a href="dynamic-group.html">Dynamic group</a>
+        <a href="env-secrets.html">.env secrets</a>
+      </div>
     </div>
   </aside>
 
   <main class="doc-main">
     <h1>1 · Route automatically</h1>
     <p class="lede"><code>model:"auto"</code> classifies the task and picks a tier; check <code>X-Selected-Model</code> to see who answered.</p>
+
+    <h2 id="what">What it is</h2>
+    <p>A request that asks for <code>model:"auto"</code> instead of a real model name. routsi scores the last user message (low/medium/high), maps that level onto the global <code>tiers:</code> map, and forwards to whichever model is behind that tier — all before the first byte goes upstream.</p>
+
+    <h2 id="why">Why</h2>
+    <p>Use this when callers shouldn't have to know or care which model answers — cheap questions should cost cheap-model money, and only the genuinely hard ones should burn a strong (expensive/slow) model. It's the default "just point your SDK at routsi" mode: no per-request routing logic in the client.</p>
+
+    <h2 id="configure">Configure</h2>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>default: gpt-cheap
+
+tiers:                  # what "auto" routes over
+  cheap: gpt-cheap       # low
+  strong: gpt-strong     # high
+
+models:
+  - name: gpt-cheap
+    type: forward
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    upstream_model: deepseek-chat
+  - name: gpt-strong
+    type: forward
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    upstream_model: gpt-5.2</pre></div>
     <div class="code"><div class="top"><span>cheap task → cheap model</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
   -d '{"model":"auto","messages":[{"role":"user","content":"say hi"}]}'
 # → X-Selected-Model: gpt-cheap</pre></div>
@@ -64,6 +100,9 @@
   -d '{"model":"auto","messages":[{"role":"user","content":"design a distributed consensus protocol with proofs"}]}'
 # → X-Selected-Model: gpt-strong</pre></div>
     <p>See the exact classification rules: <a class="link" href="../auto-routing.html">How <code>auto</code> decides</a>.</p>
+
+    <h2 id="adapt">How to adapt</h2>
+    <p>Point <code>cheap</code>/<code>strong</code> at any two models in your own catalog — a forward (OpenAI-compatible upstream), a dynamic group, or even a CLI agent all work as tier members. To add a real <code>medium</code> tier instead of letting it fall back to the nearest declared level, add a third <code>models:</code> entry and reference it under <code>tiers:</code> (the tiers map currently only has <code>cheap</code>/<code>strong</code> aliases for low/high — a raw <code>medium:</code> key is accepted the same way). If you want per-conversation stickiness on top of this (same thread keeps its escalated tier), see <a class="link" href="../routing.html">Routing &amp; stickiness</a>.</p>
 
     <p style="margin-top:44px"><a class="btn btn-ghost" href="concrete-bypass.html">Next: Bypass to a concrete model →</a></p>
   </main>

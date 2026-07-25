@@ -50,19 +50,49 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="index.html" class="active">Scenarios</a>
+      <a href="index.html">Scenarios</a>
+      <div class="sub">
+        <a href="auto-routing.html">Auto routing</a>
+        <a href="concrete-bypass.html">Concrete bypass</a>
+        <a href="token-auth.html">Token auth</a>
+        <a href="mtls.html">mTLS</a>
+        <a href="agent-session.html">Agent session</a>
+        <a href="pull-worker.html" class="active">Pull-worker</a>
+        <a href="streaming-heartbeat.html">Streaming + heartbeat</a>
+        <a href="dynamic-group.html">Dynamic group</a>
+        <a href="env-secrets.html">.env secrets</a>
+      </div>
     </div>
   </aside>
 
   <main class="doc-main">
     <h1>6 · Pull-worker</h1>
     <p class="lede">A remote agent registers a queue; requests to that queue name route to it.</p>
+
+    <h2 id="what">What it is</h2>
+    <p>Instead of routsi hosting an agent's credentials, a worker process running <em>anywhere</em> (behind NAT, on a laptop, no inbound port needed) registers a named queue via <code>POST /v1/workers/register</code>, then long-polls <code>GET /v1/workers/{name}/jobs?wait=</code> for questions and answers with <code>POST /v1/workers/{name}/jobs/{id}</code>. The queue name becomes a normal routable model.</p>
+
+    <h2 id="why">Why</h2>
+    <p>Use this when the agent that should answer can't or shouldn't run on the proxy's machine — it needs credentials, tools, or a login session that only exist on a specific developer machine or CI runner. The worker is outbound-only, so nothing needs to be exposed to reach it, and it shows up in the catalog (<code>/v1/models</code>, <code>/v1/workers</code>, the dashboard) like any other model.</p>
+
+    <h2 id="configure">Configure</h2>
+    <div class="code"><div class="top"><span>models.yaml (optional — a worker can also register at runtime)</span><button class="copy">copy</button></div><pre>workers:
+  auth: {}          # reserved — no worker auth in v1
+  # freshness: 30s  # worker considered "present" if it polled within this
+  # max_wait: 5m    # cap on how long a request blocks for a worker
+
+models:
+  - name: my-agent
+    type: queue</pre></div>
     <div class="code"><div class="top"><span>on the worker machine</span><button class="copy">copy</button></div><pre>routsi worker run --proxy https://your-proxy:8080 --queue my-agent \
   --agent 'codex exec -'</pre></div>
     <div class="code"><div class="top"><span>from any client</span><button class="copy">copy</button></div><pre>curl localhost:8080/v1/chat/completions \
   -d '{"model":"my-agent","messages":[{"role":"user","content":"hi"}]}'
 # → routed to the registered worker; 503 fast if none is polling</pre></div>
     <p>Full config reference: <a class="link" href="../workers.html">Pull-workers</a>.</p>
+
+    <h2 id="adapt">How to adapt</h2>
+    <p>To add another worker queue, declare a <code>type: queue</code> model entry (or skip the config entirely — a worker registering with a new queue name adds it dynamically) and run <code>routsi worker run --queue &lt;name&gt; --agent '&lt;your command&gt;'</code> pointed at your own agent — any command that reads the question on stdin and writes an answer to stdout works. Constraints to know: one worker per queue, delivery is at-most-once, requests are non-streaming, and there's no worker auth yet (v1 reserves the <code>workers.auth</code> key for later). <code>routsi install --skills</code> packages this as an agent skill for Claude Code / Codex if you want an agent to register itself.</p>
 
     <p style="margin-top:44px"><a class="btn btn-ghost" href="streaming-heartbeat.html">Next: Streaming with heartbeat →</a></p>
   </main>

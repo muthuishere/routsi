@@ -50,13 +50,32 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="index.html" class="active">Scenarios</a>
+      <a href="index.html">Scenarios</a>
+      <div class="sub">
+        <a href="auto-routing.html">Auto routing</a>
+        <a href="concrete-bypass.html">Concrete bypass</a>
+        <a href="token-auth.html" class="active">Token auth</a>
+        <a href="mtls.html">mTLS</a>
+        <a href="agent-session.html">Agent session</a>
+        <a href="pull-worker.html">Pull-worker</a>
+        <a href="streaming-heartbeat.html">Streaming + heartbeat</a>
+        <a href="dynamic-group.html">Dynamic group</a>
+        <a href="env-secrets.html">.env secrets</a>
+      </div>
     </div>
   </aside>
 
   <main class="doc-main">
     <h1>3 · Token-based auth, end to end</h1>
     <p class="lede">Generate a token, wire it into config, and confirm 401 → 200 from curl, the OpenAI SDK, and the dashboard.</p>
+
+    <h2 id="what">What it is</h2>
+    <p>Bearer-token auth guarding <code>/v1/*</code>, <code>/stats</code>, and <code>/metrics</code>. Requests without a valid <code>Authorization: Bearer &lt;token&gt;</code> get 401 once <code>auth.tokens_env</code> is set; <code>/health</code> stays open regardless (so load balancers never need a token).</p>
+
+    <h2 id="why">Why</h2>
+    <p>Any time routsi is reachable beyond localhost — a shared dev box, a team's LAN, a cloud VM — you want a cheap, low-ceremony gate before anyone can spend your upstream API budget or read <code>/metrics</code>. Tokens compare in constant time and are never logged or printed; only the env-var <em>name</em> lives in config.</p>
+
+    <h2 id="configure">Configure</h2>
     <div class="code"><div class="top"><span>1 · generate + store</span><button class="copy">copy</button></div><pre>routsi token -n 1
 # → prints: rtk_9f3a...
 
@@ -78,6 +97,9 @@ print(r.choices[0].message.content)
 # → 200, works unmodified — the SDK sends the token as a normal api_key</pre></div>
     <div class="code"><div class="top"><span>6 · the dashboard, token in the URL</span><button class="copy">copy</button></div><pre>open "http://localhost:8080/?token=rtk_9f3a..."</pre></div>
     <div class="callout">/health stays open regardless of auth config — health checks and load balancers never need a token.</div>
+
+    <h2 id="adapt">How to adapt</h2>
+    <p>Rotate by generating a new token with <code>routsi token -n 1</code> and appending it to <code>ROUTSI_TOKENS</code> (comma-separated — old and new both work until you remove the old one). To require client certificates <em>instead of or alongside</em> tokens, layer in <a class="link" href="mtls.html">mTLS</a> under the same <code>models.yaml</code>. Never put a token value in <code>models.yaml</code> itself — only the env-var name (<code>tokens_env</code>) belongs there.</p>
 
     <p style="margin-top:44px"><a class="btn btn-ghost" href="mtls.html">Next: mTLS →</a></p>
   </main>
