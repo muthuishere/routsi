@@ -103,6 +103,7 @@ type Config struct {
 	Auth      AuthConfig        `yaml:"auth"`
 	TLS       TLSConfig         `yaml:"tls"`
 	Workers   WorkersConfig     `yaml:"workers"`
+	Decider   DeciderConfig     `yaml:"decider"`
 
 	// StreamHeartbeat is how often the streaming envelope path writes an SSE
 	// comment (": ping\n\n") while a buffered backend is silently working, so
@@ -119,6 +120,15 @@ type WorkersConfig struct {
 	Auth      map[string]any `yaml:"auth"`      // reserved — no worker auth in v1
 	Freshness time.Duration  `yaml:"freshness"` // a worker is "present" if it polled within this (default 30s)
 	MaxWait   time.Duration  `yaml:"max_wait"`  // cap on how long a request blocks for a worker (default 5m)
+}
+
+// DeciderConfig points `auto` routing at an external, user-writable decider
+// process instead of the built-in Rules scorer (docs/adr/007). Empty Command
+// means "no decider" — behavior is unchanged from the built-in Rules.
+type DeciderConfig struct {
+	Command string        `yaml:"command"` // shell command, e.g. "node decider.js"
+	Timeout time.Duration `yaml:"timeout"` // default 3s
+	Cwd     string        `yaml:"cwd"`     // default: process cwd
 }
 
 // AuthConfig gates the API with bearer tokens. Prefer tokens_env (values in the
@@ -166,6 +176,9 @@ func Parse(b []byte) (*Config, error) {
 	cfg.expandVariants()
 	if err := cfg.validate(); err != nil {
 		return nil, err
+	}
+	if cfg.Decider.Command != "" && cfg.Decider.Timeout == 0 {
+		cfg.Decider.Timeout = 3 * time.Second
 	}
 	return cfg, nil
 }

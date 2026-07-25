@@ -40,6 +40,16 @@ tiers:
   cheap: gpt-cheap
   strong: gpt-strong
 
+# --- Custom decider (optional, docs/adr/007). Replaces the built-in Rules
+# scorer for `auto`/dynamic routing with your own subprocess, any
+# executable/runtime. stdin gets a JSON request (model/conversation_id/
+# messages/levels/tiers); stdout must print {"level":"low|medium|high"}. Any
+# failure (crash, timeout, bad output) falls back to Rules — never breaks
+# routing. See examples/README.md for the full contract + copyable scripts.
+# decider:
+#   command: "node examples/decider.js"
+#   timeout: 3s
+
 # Dynamic virtual models: ask for "dynamic-1" and the task is classified
 # (low|medium|high) and dispatched to the mapped member — any catalog model
 # works, including discovered variants and CLI agents. Conversations pin to

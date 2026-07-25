@@ -124,6 +124,26 @@ status/dynamic-register/collision/skills-install all checked. OpenSpec change ar
 (2026-07-25-add-pull-worker). ADR-002/003 (unified-registry + control-plane refactor)
 **parked** — owner scoped to additive only.
 
+## External decider (ADR-007, shipped 2026-07-25)
+
+Built fast, short-ADR-only (ceremony waived by owner). Optional `decider:` config
+block (`internal/config`) — `command`/`timeout`/`cwd` — lets a user swap the built-in
+`Rules` scorer for a subprocess: `router.External` (new, `internal/router/external.go`)
+implements `Router` unchanged, spawns `sh -c "<command>"` per `auto` request, writes a
+JSON request (model/conversation_id/messages/levels/tiers) to stdin, reads
+`{"level":"low|medium|high"}` from stdout, and falls back to `Rules` on ANY failure
+(spawn error, timeout, non-zero exit, empty/malformed/unknown output) — logs a one-line
+warning, never the prompt. Wired in `cmd/routsi/main.go` (`Decider.Command != ""` ⇒
+`router.NewExternal(...)`, else `nil` ⇒ `server.New` defaults to `Rules` as before — the
+no-decider path is byte-for-byte unchanged). `{"model":...}` direct-model extension
+considered and skipped (would need `server.resolve` to special-case decider output;
+level contract already covers the case via the group's own tiers/levels map).
+Examples: `examples/decider.js` + `examples/decider.py` (zero/stdlib deps, mirror the
+built-in heuristic, heavily commented), `examples/README.md` documents the stdin/stdout
+contract. Table-driven tests in `internal/router/external_test.go` cover: high level,
+malformed/empty output, unknown level, non-zero exit, timeout (all fall back to the
+`Rules` decision for that input) — `go vet ./...` + `go test ./...` green.
+
 ## Current state (2026-07-23)
 
 Phase 1 built and tested: routing (`auto` + rules), bypass, stickiness with

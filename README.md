@@ -40,6 +40,28 @@ curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
 - **`model: "openrouter/anthropic/claude-haiku-4.5"`** — a concrete model, no routing.
 - **`model: "devin/opus"`** — an agent as a model.
 
+#### Custom decider
+
+`auto`/dynamic routing normally classifies with the built-in `Rules`
+heuristic. To plug in your own routing brain, add a `decider:` block to
+`models.yaml`:
+
+```yaml
+decider:
+  command: "node examples/decider.js"   # any executable/runtime, run via `sh -c`
+  timeout: 3s                            # optional, default 3s
+```
+
+routsi writes a JSON request to the command's stdin
+(`model`/`conversation_id`/`messages`/`levels`/`tiers`) and reads
+`{"level": "low"|"medium"|"high"}` back from stdout. Any failure — crash,
+timeout, non-zero exit, malformed/empty/unknown output — falls back to the
+built-in `Rules` decision, so a broken decider never fails a request. Leaving
+`decider.command` empty (the default) keeps today's behavior unchanged. See
+[`examples/`](examples/README.md) for the full contract and copyable Node/
+Python starting points, and [ADR-007](docs/adr/007-external-decider.md) for
+the design.
+
 ### Forwarding to an agent model (devin/…)
 
 Agent CLIs expose their inner models as `<agent>/<model>` catalog entries — from

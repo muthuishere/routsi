@@ -25,6 +25,7 @@ import (
 	"github.com/muthuishere/routsi/internal/backend"
 	"github.com/muthuishere/routsi/internal/config"
 	"github.com/muthuishere/routsi/internal/discovery"
+	"github.com/muthuishere/routsi/internal/router"
 	"github.com/muthuishere/routsi/internal/server"
 	"github.com/muthuishere/routsi/internal/service"
 )
@@ -198,7 +199,13 @@ func serve() {
 	// the stock binary ships with none.
 	reg := backend.NewRegistry()
 
-	srv, err := server.New(cfg, reg, nil)
+	var rt router.Router
+	if cfg.Decider.Command != "" {
+		rt = router.NewExternal(cfg.Decider.Command, cfg.Decider.Timeout, cfg.Decider.Cwd, cfg.Tiers, router.NewRules())
+		log.Printf("using external decider: %s", cfg.Decider.Command)
+	}
+
+	srv, err := server.New(cfg, reg, rt)
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
