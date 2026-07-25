@@ -103,6 +103,12 @@ type Config struct {
 	Auth      AuthConfig        `yaml:"auth"`
 	TLS       TLSConfig         `yaml:"tls"`
 	Workers   WorkersConfig     `yaml:"workers"`
+
+	// StreamHeartbeat is how often the streaming envelope path writes an SSE
+	// comment (": ping\n\n") while a buffered backend is silently working, so
+	// idle-timeout intermediaries (nginx/ALB/Cloudflare) don't drop the
+	// connection. Default 15s; 0 disables heartbeats entirely.
+	StreamHeartbeat time.Duration `yaml:"stream_heartbeat"`
 }
 
 // WorkersConfig is the pull-worker (ADR-001) settings block. Auth is a
@@ -153,7 +159,7 @@ func Load(path string) (*Config, error) {
 }
 
 func Parse(b []byte) (*Config, error) {
-	cfg := &Config{Listen: ":8080", StickyTTL: 10 * time.Minute}
+	cfg := &Config{Listen: ":8080", StickyTTL: 10 * time.Minute, StreamHeartbeat: 15 * time.Second}
 	if err := yaml.Unmarshal(b, cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}

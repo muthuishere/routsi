@@ -177,3 +177,18 @@ gh-pages site at muthuishere.github.io/routsi via gh-pages branch — Pages REST
 llm-forward-proxy.
 Not yet built (see docs/research/): tool-call passthrough on enveloped paths,
 escalation memory handoff, compaction, budget caps, learned scorer, Phase-2 router.
+
+Added 2026-07-25: **SSE heartbeat keep-alive** on the streaming envelope path
+(`internal/server/server.go`'s `envelope`) — the buffered backend's `Stream` now
+runs in a goroutine funneling deltas through a channel; the handler goroutine
+serializes all writes via a `select` over deltas/done/ticker/ctx-done, so a
+heartbeat can never interleave into a half-written chunk. Wire format: a bare
+SSE comment `: ping\n\n` (ignored by OpenAI SDK parsers) written only if no
+delta landed since the last tick. New config key `stream_heartbeat` (default
+15s; `0` disables), wired through `internal/config`. Forward passthrough
+(`internal/backend/forward.go`) left untouched — it already streams live
+upstream bytes, lower risk; not rearchitected. Also added
+`internal/server/scenarios_test.go` — five named scenario tests (token auth,
+auto routing, concrete bypass, streaming+heartbeat, pull-worker) as executable
+examples backing a future docs "Scenarios" page. `go vet ./...` + `go test
+./...` green.

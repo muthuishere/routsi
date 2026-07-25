@@ -385,20 +385,68 @@ func (s *Server) envelope(w http.ResponseWriter, r *http.Request, t *target, req
 	open.Choices[0].Delta.Role = "assistant"
 	writeChunk(open)
 
+	// Buffered backends (agents, pull-workers, custom, translated) block
+	// inside Stream for many seconds without writing anything; run it in a
+	// goroutine and funnel its deltas through a channel so the handler
+	// goroutine can interleave SSE heartbeat comments while it waits. All
+	// writes to w happen on this (the handler) goroutine only, so a delta and
+	// a heartbeat can never interleave into a half-written frame.
+	deltaCh := make(chan string)
+	doneCh := make(chan error, 1)
+	go func() {
+		defer close(deltaCh)
+		doneCh <- t.backend.Stream(r.Context(), req, func(delta string) {
+			if delta != "" {
+				deltaCh <- delta
+			}
+		})
+	}()
+
+	var ticker *time.Ticker
+	var tickCh <-chan time.Time
+	if s.cfg.StreamHeartbeat > 0 {
+		ticker = time.NewTicker(s.cfg.StreamHeartbeat)
+		defer ticker.Stop()
+		tickCh = ticker.C
+	}
+
 	var streamed strings.Builder
-	err := t.backend.Stream(r.Context(), req, func(delta string) {
-		if delta != "" {
+	var streamErr error
+	activity := false // any delta written since the last tick?
+loop:
+	for {
+		select {
+		case delta, ok := <-deltaCh:
+			if !ok {
+				deltaCh = nil // avoid a tight busy-loop once closed; doneCh still pending
+				continue
+			}
+			activity = true
 			streamed.WriteString(delta)
 			writeChunk(api.NewChunk(id, t.model.Name, delta, false))
+		case streamErr = <-doneCh:
+			break loop
+		case <-tickCh:
+			if !activity {
+				fmt.Fprint(w, ": ping\n\n")
+				if flusher != nil {
+					flusher.Flush()
+				}
+			}
+			activity = false
+		case <-r.Context().Done():
+			streamErr = r.Context().Err()
+			break loop
 		}
-	})
-	if err != nil {
+	}
+
+	if streamErr != nil {
 		// Headers are gone; surface the error inside the stream.
-		fmt.Fprintf(w, "data: {\"error\":{\"message\":%q}}\n\n", err.Error())
+		fmt.Fprintf(w, "data: {\"error\":{\"message\":%q}}\n\n", streamErr.Error())
 		if flusher != nil {
 			flusher.Flush()
 		}
-		return nil, err
+		return nil, streamErr
 	}
 	final := api.NewChunk(id, t.model.Name, "", true)
 	final.Usage = api.EstimateUsage(req, streamed.String())
