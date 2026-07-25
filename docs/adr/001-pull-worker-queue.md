@@ -3,6 +3,11 @@
 - **Status:** Proposed (discussion)
 - **Date:** 2026-07-23
 - **Deciders:** owner + routsi
+- **Part of the provider arc:** this is the pull-worker *kind* under
+  [ADR-002](002-unified-provider-model.md); status per
+  [ADR-004](004-provider-status-health.md); worker loop per
+  [ADR-005](005-agent-skill-worker.md); remote registration per
+  [ADR-003](003-control-plane-remote-cli.md).
 
 ## Context
 
