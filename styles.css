@@ -155,6 +155,12 @@ table.cmp col.hl,table.cmp th.hl,table.cmp td.hl{background:color-mix(in srgb,va
 .copy{background:none;border:1px solid var(--line-2);color:var(--fg-dim);border-radius:7px;padding:3px 10px;font-family:var(--sans);font-size:12px;cursor:pointer}
 .copy:hover{color:var(--fg);border-color:var(--violet)}
 
+/* live dashboard shot */
+.shot{margin:0;border:1px solid var(--line-2);border-radius:var(--radius);overflow:hidden;
+  background:var(--panel);box-shadow:0 26px 70px rgba(0,0,0,.42)}
+:root[data-theme="light"] .shot{box-shadow:0 20px 54px rgba(60,50,120,.15)}
+.shot img{display:block;width:100%;height:auto}
+
 /* CTA band */
 .band{text-align:center;background:var(--grad);border-radius:26px;padding:52px 26px;color:#fff;position:relative;overflow:hidden}
 .band h2{font-size:clamp(26px,3.8vw,40px);color:#fff}
