@@ -8,12 +8,19 @@ sticky_ttl: 10m
 # routed to it. No worker auth in v1 — reserved placeholder:
 workers:
   auth: {}
+  # freshness: 30s   # optional — worker considered "present" if it polled within this
+  # max_wait: 5m     # optional — cap on how long a request blocks for a worker
 # A config-declared queue reserves a name (workers also register dynamically):
 #   - name: my-remote-agent
 #     type: queue
 
 # routsi config. Dashboard at http://<listen>/  ·  /stats (json)  ·  /metrics (prom).
 # May also live at ~/.config/routsi/models.yaml. Run as a service: `routsi install`.
+#
+# Secrets: on startup routsi layers env vars (highest first): process env >
+# -env/ROUTSI_ENV_FILE > ./.env > ~/.config/routsi/.env (values never logged) —
+# put provider keys / ROUTSI_TOKENS in whichever .env suits you instead of your
+# shell profile. Keys are always referenced BY NAME below.
 
 # --- Inbound auth (optional). When tokens are set, /v1/* + /stats + /metrics
 # require `Authorization: Bearer <token>` (dashboard: open /?token=...).
@@ -88,6 +95,8 @@ models:
   # - name: devin        # conversations map to real Devin sessions (-r resume)
   #   type: devin
   #   provider: cognition
+  #   bin: /opt/homebrew/bin/devin              # optional; default = "devin" on PATH
+  #   args: ["--org", "acme"]                   # optional; prepended to every invocation
   #   variants: [sonnet, opus]                 # -> devin --model <variant>
   #   permission_mode: auto                    # optional -> devin --permission-mode
   # - name: codex        # one-shot codex exec; model names depend on your account

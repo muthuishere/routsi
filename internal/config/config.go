@@ -88,9 +88,10 @@ type Model struct {
 
 	// CLI-agent fields, shared by devin/codex/copilot (UpstreamModel doubles
 	// as the agent's --model / -m flag).
-	DevinBin       string `yaml:"bin"`             // binary override; default = type name from PATH
-	Workdir        string `yaml:"workdir"`         // agent working directory (default: managed cache dir)
-	PermissionMode string `yaml:"permission_mode"` // devin --permission-mode
+	DevinBin       string   `yaml:"bin"`             // binary override; default = type name from PATH
+	Args           []string `yaml:"args"`            // extra args, prepended to the invocation's own args
+	Workdir        string   `yaml:"workdir"`         // agent working directory (default: managed cache dir)
+	PermissionMode string   `yaml:"permission_mode"` // devin --permission-mode
 }
 
 type Config struct {
@@ -104,11 +105,14 @@ type Config struct {
 	Workers   WorkersConfig     `yaml:"workers"`
 }
 
-// WorkersConfig is the pull-worker (ADR-001) settings block. In v1 it only
-// carries a reserved, empty auth placeholder so worker auth can be added later
-// without a breaking config change.
+// WorkersConfig is the pull-worker (ADR-001) settings block. Auth is a
+// reserved, empty placeholder so worker auth can be added later without a
+// breaking config change. Freshness/MaxWait tune the broker (internal/queue);
+// zero means "use the broker's built-in default".
 type WorkersConfig struct {
-	Auth map[string]any `yaml:"auth"` // reserved — no worker auth in v1
+	Auth      map[string]any `yaml:"auth"`      // reserved — no worker auth in v1
+	Freshness time.Duration  `yaml:"freshness"` // a worker is "present" if it polled within this (default 30s)
+	MaxWait   time.Duration  `yaml:"max_wait"`  // cap on how long a request blocks for a worker (default 5m)
 }
 
 // AuthConfig gates the API with bearer tokens. Prefer tokens_env (values in the

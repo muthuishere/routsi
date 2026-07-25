@@ -38,7 +38,7 @@ func (d *Devin) bin() string {
 }
 
 func (d *Devin) baseArgs() []string {
-	args := []string{}
+	args := append([]string{}, d.model.Args...)
 	if d.model.UpstreamModel != "" && d.model.UpstreamModel != d.model.Name {
 		args = append(args, "--model", d.model.UpstreamModel)
 	}

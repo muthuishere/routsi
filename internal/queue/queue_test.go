@@ -127,6 +127,24 @@ func TestAnswerAfterTimeoutDropped(t *testing.T) {
 	}
 }
 
+func TestNewWithConfigAppliesOverridesAndDefaults(t *testing.T) {
+	b := NewWithConfig(5*time.Second, time.Minute)
+	if b.freshness != 5*time.Second {
+		t.Fatalf("freshness = %v, want 5s", b.freshness)
+	}
+	if b.maxWait != time.Minute {
+		t.Fatalf("maxWait = %v, want 1m", b.maxWait)
+	}
+	// Zero values fall back to the package defaults.
+	b = NewWithConfig(0, 0)
+	if b.freshness != DefaultFreshness {
+		t.Fatalf("freshness = %v, want default %v", b.freshness, DefaultFreshness)
+	}
+	if b.maxWait != DefaultMaxWait {
+		t.Fatalf("maxWait = %v, want default %v", b.maxWait, DefaultMaxWait)
+	}
+}
+
 func TestStateTransitions(t *testing.T) {
 	b := New()
 	now := time.Unix(1000, 0)

@@ -101,6 +101,25 @@ func TestCLIAgentRendersHistory(t *testing.T) {
 	}
 }
 
+func TestCLIAgentExtraArgsPrepended(t *testing.T) {
+	bin, dir := fakeAgent(t)
+	a := NewCLIAgent(&config.Model{
+		Name: "copilot", Type: config.TypeCopilot, DevinBin: bin, Workdir: dir,
+		Args: []string{"--profile", "work"},
+	})
+	if _, err := a.Complete(context.Background(), agentReq("hi")); err != nil {
+		t.Fatal(err)
+	}
+	calls, _ := os.ReadFile(filepath.Join(dir, "calls.log"))
+	got := string(calls)
+	if !strings.Contains(got, "--profile work") {
+		t.Fatalf("configured args missing: %s", got)
+	}
+	if strings.Index(got, "--profile work") > strings.Index(got, "-p") {
+		t.Fatalf("configured args must be prepended before the built-in flags: %s", got)
+	}
+}
+
 func TestClaudePrintMode(t *testing.T) {
 	bin, dir := fakeAgent(t)
 	a := NewCLIAgent(&config.Model{Name: "claude", Type: config.TypeClaude, DevinBin: bin, Workdir: dir, UpstreamModel: "opus"})

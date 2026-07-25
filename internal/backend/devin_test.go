@@ -129,6 +129,25 @@ func TestDevinModelAndPermissionFlags(t *testing.T) {
 	}
 }
 
+func TestDevinExtraArgsPrepended(t *testing.T) {
+	bin, dir := fakeDevin(t)
+	d := NewDevin(&config.Model{
+		Name: "devin", Type: config.TypeDevin, DevinBin: bin, Workdir: dir,
+		Args: []string{"--org", "acme"}, UpstreamModel: "opus",
+	})
+	if _, err := d.Complete(context.Background(), devinReq("", "hi")); err != nil {
+		t.Fatal(err)
+	}
+	calls, _ := os.ReadFile(filepath.Join(dir, "calls.log"))
+	got := string(calls)
+	if !strings.Contains(got, "--org acme") {
+		t.Fatalf("configured args missing: %s", got)
+	}
+	if strings.Index(got, "--org acme") > strings.Index(got, "--model opus") {
+		t.Fatalf("configured args must be prepended before the built-in flags: %s", got)
+	}
+}
+
 func TestDevinDefaultsToManagedWorkdir(t *testing.T) {
 	d := NewDevin(&config.Model{Name: "devin-x", Type: config.TypeDevin})
 	if d.workdir == "" {

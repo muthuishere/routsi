@@ -66,7 +66,7 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 		targets:  map[string]*target{},
 		metrics:  metrics.New(),
 		tokens:   cfg.Auth.AuthTokens(),
-		broker:   queue.New(),
+		broker:   queue.NewWithConfig(cfg.Workers.Freshness, cfg.Workers.MaxWait),
 		dynamic:  map[string]*target{},
 	}
 	for i := range cfg.Models {

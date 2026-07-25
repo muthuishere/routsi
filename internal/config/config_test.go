@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestVariantExpansion(t *testing.T) {
 	cfg, err := Parse([]byte(`
@@ -32,6 +35,65 @@ models:
 	}
 	if cfg.Model("up/b").UpstreamModel != "b" {
 		t.Fatal("variant upstream_model not set")
+	}
+}
+
+func TestCLIAgentBinAndArgsParsed(t *testing.T) {
+	cfg, err := Parse([]byte(`
+models:
+  - name: devin
+    type: devin
+    bin: echo
+    args: ["--org", "acme"]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := cfg.Model("devin")
+	if m == nil {
+		t.Fatal("model not found")
+	}
+	if m.DevinBin != "echo" {
+		t.Fatalf("bin = %q, want echo", m.DevinBin)
+	}
+	if len(m.Args) != 2 || m.Args[0] != "--org" || m.Args[1] != "acme" {
+		t.Fatalf("args = %v, want [--org acme]", m.Args)
+	}
+}
+
+func TestWorkersDefaultsToZeroLeavesBrokerDefaults(t *testing.T) {
+	cfg, err := Parse([]byte(`
+models:
+  - name: up
+    type: forward
+    base_url: http://x
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Workers.Freshness != 0 || cfg.Workers.MaxWait != 0 {
+		t.Fatalf("workers = %+v, want zero (broker applies its own defaults)", cfg.Workers)
+	}
+}
+
+func TestWorkersFreshnessAndMaxWaitParsed(t *testing.T) {
+	cfg, err := Parse([]byte(`
+models:
+  - name: up
+    type: forward
+    base_url: http://x
+workers:
+  freshness: 10s
+  max_wait: 1m
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Workers.Freshness != 10*time.Second {
+		t.Fatalf("freshness = %v", cfg.Workers.Freshness)
+	}
+	if cfg.Workers.MaxWait != time.Minute {
+		t.Fatalf("max_wait = %v", cfg.Workers.MaxWait)
 	}
 }
 

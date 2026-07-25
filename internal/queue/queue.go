@@ -73,11 +73,31 @@ type Broker struct {
 	now        func() time.Time
 }
 
+// DefaultFreshness/DefaultMaxWait are the broker's built-in operational
+// values, used whenever config leaves them at zero (internal/config
+// WorkersConfig).
+const (
+	DefaultFreshness = 30 * time.Second
+	DefaultMaxWait   = 5 * time.Minute
+)
+
 func New() *Broker {
+	return NewWithConfig(DefaultFreshness, DefaultMaxWait)
+}
+
+// NewWithConfig builds a broker with an operator-tunable freshness window and
+// max-wait cap; a zero value falls back to the package default.
+func NewWithConfig(freshness, maxWait time.Duration) *Broker {
+	if freshness <= 0 {
+		freshness = DefaultFreshness
+	}
+	if maxWait <= 0 {
+		maxWait = DefaultMaxWait
+	}
 	return &Broker{
 		queues:     map[string]*queue{},
-		maxWait:    5 * time.Minute,
-		freshness:  30 * time.Second,
+		maxWait:    maxWait,
+		freshness:  freshness,
 		pendingCap: 256,
 		now:        time.Now,
 	}

@@ -69,7 +69,7 @@ func usage() {
 	fmt.Print(`routsi — route each request to the right model or agent, behind one OpenAI API.
 
 usage:
-  routsi [serve] [-config path]   run the server (default)
+  routsi [serve] [-config path] [-listen addr] [-port n] [-env file]   run the server (default)
   routsi install  [-config path]  install as a keep-alive background service
   routsi install  --skills        install the agent skill(s) into ~/.claude, ~/.codex
   routsi worker   run  --proxy URL --queue NAME --agent 'cmd'   run a pull-worker
@@ -81,6 +81,8 @@ usage:
   routsi version
 
 config resolution: -config flag > ./models.yaml > ~/.config/routsi/models.yaml
+listen resolution: -listen flag > -port flag > models.yaml 'listen:' > ':8080'
+env resolution:    process env > -env/ROUTSI_ENV_FILE > ./.env > ~/.config/routsi/.env
 dashboard + metrics: http://<listen>/  ·  /stats  ·  /metrics
 `)
 }
@@ -100,14 +102,94 @@ func resolveConfigPath(flagVal string) string {
 	return "models.yaml"
 }
 
+// resolveListen applies the -listen/-port flag precedence: -listen wins
+// outright; -port is a shorthand that becomes ":PORT" when it's digits-only
+// (so "-port 9000" -> ":9000"), or is used as-is otherwise (e.g. "0.0.0.0:9000").
+// Empty return means "no override" — caller keeps whatever config.Load set
+// (yaml `listen:` or its own ":8080" default).
+func resolveListen(listenFlag, portFlag string) string {
+	if listenFlag != "" {
+		return listenFlag
+	}
+	if portFlag == "" {
+		return ""
+	}
+	if isDigits(portFlag) {
+		return ":" + portFlag
+	}
+	return portFlag
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// loadEnvFiles layers env sources so all three work together. Precedence,
+// highest first: the process environment (never overridden), then an explicit
+// env file (-env flag or ROUTSI_ENV_FILE), then ./.env, then
+// ~/.config/routsi/.env. LoadDotEnv never overrides an already-set key, so
+// loading in this order makes earlier sources win. Values are never logged.
+func loadEnvFiles(explicit string) {
+	if explicit == "" {
+		explicit = os.Getenv("ROUTSI_ENV_FILE")
+	}
+	var paths []string
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
+		for _, e := range paths {
+			if e == p {
+				return // dedupe
+			}
+		}
+		paths = append(paths, p)
+	}
+	add(explicit)
+	add(".env")
+	if dir := config.ConfigDir(); dir != "" {
+		add(filepath.Join(dir, ".env"))
+	}
+	for _, p := range paths {
+		n, err := config.LoadDotEnv(p)
+		if err != nil {
+			log.Printf("warning: env file %s: %v", p, err)
+			continue
+		}
+		if n > 0 {
+			log.Printf("loaded %d var(s) from %s", n, p)
+		}
+	}
+}
+
 func serve() {
 	cfgPath := flag.String("config", "", "path to models.yaml")
+	listenFlag := flag.String("listen", "", "listen address, e.g. :8080 or 0.0.0.0:8080 (overrides models.yaml listen)")
+	portFlag := flag.String("port", "", "listen port shorthand for -listen ':PORT'")
+	envFlag := flag.String("env", "", "path to an env file to load (in addition to ./.env and ~/.config/routsi/.env)")
 	flag.Parse()
+
+	loadEnvFiles(*envFlag)
+
 	path := resolveConfigPath(*cfgPath)
 
 	cfg, err := config.Load(path)
 	if err != nil {
 		log.Fatalf("config: %v", err)
+	}
+	if addr := resolveListen(*listenFlag, *portFlag); addr != "" {
+		cfg.Listen = addr
 	}
 	if err := discovery.Populate(context.Background(), cfg); err != nil {
 		log.Printf("warning: %v", err) // per-model, non-fatal

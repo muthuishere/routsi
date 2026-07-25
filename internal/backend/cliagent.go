@@ -83,6 +83,9 @@ func (a *CLIAgent) Complete(ctx context.Context, req *api.ChatRequest) (string, 
 		return "", fmt.Errorf("cliagent: unsupported type %q", a.model.Type)
 	}
 
+	if len(a.model.Args) > 0 {
+		args = append(append([]string{}, a.model.Args...), args...)
+	}
 	cmd := exec.CommandContext(ctx, a.bin(), args...)
 	cmd.Dir = a.workdir
 	var out, errb bytes.Buffer
