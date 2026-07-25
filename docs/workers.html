@@ -38,6 +38,7 @@
       <h4>Configure</h4>
       <a href="configuration.html">models.yaml</a>
       <a href="routing.html">Routing &amp; stickiness</a>
+      <a href="auto-routing.html">How auto decides</a>
       <a href="agents.html">Agents as models</a>
       <a href="workers.html" class="active">Pull-workers</a>
     </div>
@@ -49,7 +50,7 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="scenarios.html">Scenarios</a>
+      <a href="scenarios/index.html">Scenarios</a>
     </div>
   </aside>
 
@@ -67,7 +68,7 @@
 routsi install --skills    # install the worker as an agent skill (~/.claude, ~/.codex)</pre></div>
     <div class="callout">A queue is a normal routable model. One worker per queue in v1; delivery is at-most-once; no worker auth yet (reserved <code>workers.auth</code> placeholder).</div>
 
-    <p>Full walk-through, including a live request: <a class="link" href="scenarios.html#worker">Scenarios → Pull-worker</a>.</p>
+    <p>Full walk-through, including a live request: <a class="link" href="scenarios/pull-worker.html">Scenarios → Pull-worker</a>.</p>
 
     <p style="margin-top:44px"><a class="btn btn-ghost" href="auth.html">Next: Auth &amp; mTLS →</a></p>
   </main>

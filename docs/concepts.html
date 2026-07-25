@@ -38,6 +38,7 @@
       <h4>Configure</h4>
       <a href="configuration.html">models.yaml</a>
       <a href="routing.html">Routing &amp; stickiness</a>
+      <a href="auto-routing.html">How auto decides</a>
       <a href="agents.html">Agents as models</a>
       <a href="workers.html">Pull-workers</a>
     </div>
@@ -49,7 +50,7 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="scenarios.html">Scenarios</a>
+      <a href="scenarios/index.html">Scenarios</a>
     </div>
   </aside>
 
@@ -63,7 +64,7 @@
       <li><strong>Sticky by conversation id</strong> — a thread pins to its member and only ever <em>escalates</em>, never downgrades.</li>
       <li><strong>Pre-request routing only</strong> — routsi never touches a response mid-stream; forwards are raw byte passthrough with model + auth rewrite.</li>
     </ul>
-    <p>See these in action: <a class="link" href="routing.html">Routing &amp; stickiness</a> for the mechanics, or <a class="link" href="scenarios.html">Scenarios</a> for copy-paste examples.</p>
+    <p>See these in action: <a class="link" href="routing.html">Routing &amp; stickiness</a> for the mechanics, <a class="link" href="auto-routing.html">How <code>auto</code> decides</a> for the exact classification rules, or <a class="link" href="scenarios/index.html">Scenarios</a> for copy-paste examples.</p>
 
     <p style="margin-top:44px"><a class="btn btn-ghost" href="configuration.html">Next: models.yaml →</a></p>
   </main>

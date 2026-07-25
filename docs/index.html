@@ -38,6 +38,7 @@
       <h4>Configure</h4>
       <a href="configuration.html">models.yaml</a>
       <a href="routing.html">Routing &amp; stickiness</a>
+      <a href="auto-routing.html">How auto decides</a>
       <a href="agents.html">Agents as models</a>
       <a href="workers.html">Pull-workers</a>
     </div>
@@ -49,7 +50,7 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="scenarios.html">Scenarios</a>
+      <a href="scenarios/index.html">Scenarios</a>
     </div>
   </aside>
 
@@ -57,24 +58,25 @@
     <h1>routsi documentation</h1>
     <p class="lede">One OpenAI-compatible endpoint that routes each request to the right model or agent. Get it, point an SDK at it, and let it decide.</p>
 
-    <div class="code"><div class="top"><span>pick one</span><button class="copy">copy</button></div><pre>npm install -g routsi                 # npm (recommended)
+    <div class="code"><div class="top"><span>pick one</span><button class="copy">copy</button></div><pre>npm install -g @muthuishere/routsi                 # npm (recommended)
 # or: download a release binary from github.com/muthuishere/routsi/releases
 # or: git clone ... &amp;&amp; task build &amp;&amp; task install   # from source</pre></div>
 
     <h2 id="map">Where to go</h2>
-    <p>Sections mirror the sidebar. Start top-to-bottom if you're new; jump straight to <a class="link" href="scenarios.html">Scenarios</a> if you just want working commands to copy.</p>
+    <p>Sections mirror the sidebar. Start top-to-bottom if you're new; jump straight to <a class="link" href="scenarios/index.html">Scenarios</a> if you just want working commands to copy.</p>
     <ul>
       <li><strong><a class="link" href="install.html">Install</a></strong> — npm, release binary, or from source.</li>
       <li><strong><a class="link" href="quickstart.html">Quick start</a></strong> — config, run, first curl.</li>
       <li><strong><a class="link" href="concepts.html">Core concepts</a></strong> — auto routing, bypass, dynamic groups, sticky escalate-only.</li>
       <li><strong><a class="link" href="configuration.html">models.yaml</a></strong> — the full config reference.</li>
       <li><strong><a class="link" href="routing.html">Routing &amp; stickiness</a></strong> — dynamic groups and conversation pinning.</li>
+      <li><strong><a class="link" href="auto-routing.html">How <code>auto</code> decides</a></strong> — the exact low/medium/high classification rules.</li>
       <li><strong><a class="link" href="agents.html">Agents as models</a></strong> — devin/codex/copilot/claude as first-class models.</li>
       <li><strong><a class="link" href="workers.html">Pull-workers</a></strong> — remote agents answer via a broker queue.</li>
       <li><strong><a class="link" href="auth.html">Auth &amp; mTLS</a></strong> — bearer tokens, client certs, secrets.</li>
       <li><strong><a class="link" href="dashboard.html">Dashboard &amp; metrics</a></strong> — live UI, /stats, /metrics, running as a service.</li>
       <li><strong><a class="link" href="api.html">HTTP API</a></strong> — endpoints and streaming behavior.</li>
-      <li><strong><a class="link" href="scenarios.html">Scenarios</a></strong> — copy-paste recipes, tested end to end.</li>
+      <li><strong><a class="link" href="scenarios/index.html">Scenarios</a></strong> — copy-paste recipes, tested end to end.</li>
     </ul>
   </main>
 </div>

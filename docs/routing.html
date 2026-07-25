@@ -38,6 +38,7 @@
       <h4>Configure</h4>
       <a href="configuration.html">models.yaml</a>
       <a href="routing.html" class="active">Routing &amp; stickiness</a>
+      <a href="auto-routing.html">How auto decides</a>
       <a href="agents.html">Agents as models</a>
       <a href="workers.html">Pull-workers</a>
     </div>
@@ -49,7 +50,7 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="scenarios.html">Scenarios</a>
+      <a href="scenarios/index.html">Scenarios</a>
     </div>
   </aside>
 
@@ -64,7 +65,7 @@
     low: gpt-cheap
     medium: openai/gpt-4o-mini
     high: devin/claude-opus-4.8    # hard tasks → a real agent</pre></div>
-    <p>Ask for <code>dynamic-1</code> and routsi classifies the current turn and dispatches to the mapped member. Missing levels fall back to the nearest declared one. <code>auto</code> works the same way over the global <code>tiers:</code> map.</p>
+    <p>Ask for <code>dynamic-1</code> and routsi classifies the current turn and dispatches to the mapped member. Missing levels fall back to the nearest declared one. <code>auto</code> works the same way over the global <code>tiers:</code> map — see <a class="link" href="auto-routing.html">How <code>auto</code> decides</a> for the exact classification rules.</p>
 
     <h2 id="sticky">Sticky, escalate-only</h2>
     <p>Conversation identity comes from (in order) the <code>X-Conversation-Id</code> header, a body <code>conversation_id</code> field, or a hash of the first user message. A pinned thread only ever moves <em>up</em> a tier — it never silently downgrades mid-conversation. Fingerprint ids (<code>fp-</code> prefix) are used for stickiness only, never to trigger proxy-managed memory.</p>

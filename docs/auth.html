@@ -38,6 +38,7 @@
       <h4>Configure</h4>
       <a href="configuration.html">models.yaml</a>
       <a href="routing.html">Routing &amp; stickiness</a>
+      <a href="auto-routing.html">How auto decides</a>
       <a href="agents.html">Agents as models</a>
       <a href="workers.html">Pull-workers</a>
     </div>
@@ -49,7 +50,7 @@
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="scenarios.html">Scenarios</a>
+      <a href="scenarios/index.html">Scenarios</a>
     </div>
   </aside>
 
@@ -69,7 +70,7 @@ tls:
   key: server.key
   client_ca: clients-ca.crt    # + client_ca ⇒ mutual TLS (client certs required)</pre></div>
     <p>With tokens on, <code>/v1/*</code>, <code>/stats</code> and <code>/metrics</code> require <code>Authorization: Bearer &lt;tok&gt;</code> (OpenAI SDKs send it as the api_key); the dashboard opens at <code>/?token=…</code>. <code>/health</code> stays open. Token values live in env vars — never in the config file.</p>
-    <p>Full end-to-end walk-through (curl 401→200, Python SDK, dashboard): <a class="link" href="scenarios.html#auth">Scenarios → Token-based auth</a>. mTLS walk-through: <a class="link" href="scenarios.html#mtls">Scenarios → mTLS</a>.</p>
+    <p>Full end-to-end walk-through (curl 401→200, Python SDK, dashboard): <a class="link" href="scenarios/token-auth.html">Scenarios → Token-based auth</a>. mTLS walk-through: <a class="link" href="scenarios/mtls.html">Scenarios → mTLS</a>.</p>
 
     <h2 id="secrets">Secrets via <code>.env</code></h2>
     <p>On startup routsi layers environment variables from several sources so provider keys and <code>ROUTSI_TOKENS</code> can live wherever suits you. Precedence, highest first:</p>

@@ -3,22 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard & metrics — routsi docs</title>
-<meta name="description" content="The live dashboard, /stats, /metrics, and running routsi as a background service.">
+<title>Scenario: Route automatically — routsi docs</title>
+<meta name="description" content="model:auto classifies the task and picks a tier.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="../../styles.css">
 </head>
 <body>
 <div class="bg"></div>
 
 <nav>
   <div class="wrap">
-    <a class="brand" href="../index.html"><span class="dot"></span>routsi</a>
+    <a class="brand" href="../../index.html"><span class="dot"></span>routsi</a>
     <div class="nav-links">
-      <a href="../index.html#compare">Compare</a>
-      <a href="../index.html#who">Who it's for</a>
-      <a href="index.html">Docs</a>
+      <a href="../../index.html#compare">Compare</a>
+      <a href="../../index.html#who">Who it's for</a>
+      <a href="../index.html">Docs</a>
       <button class="themebtn" id="theme" aria-label="Toggle theme">◑</button>
       <a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a>
     </div>
@@ -29,53 +29,50 @@
   <aside class="sidebar">
     <div class="grp">
       <h4>Start here</h4>
-      <a href="index.html">Overview</a>
-      <a href="install.html">Install</a>
-      <a href="quickstart.html">Quick start</a>
-      <a href="concepts.html">Core concepts</a>
+      <a href="../index.html">Overview</a>
+      <a href="../install.html">Install</a>
+      <a href="../quickstart.html">Quick start</a>
+      <a href="../concepts.html">Core concepts</a>
     </div>
     <div class="grp">
       <h4>Configure</h4>
-      <a href="configuration.html">models.yaml</a>
-      <a href="routing.html">Routing &amp; stickiness</a>
-      <a href="auto-routing.html">How auto decides</a>
-      <a href="agents.html">Agents as models</a>
-      <a href="workers.html">Pull-workers</a>
+      <a href="../configuration.html">models.yaml</a>
+      <a href="../routing.html">Routing &amp; stickiness</a>
+      <a href="../auto-routing.html">How auto decides</a>
+      <a href="../agents.html">Agents as models</a>
+      <a href="../workers.html">Pull-workers</a>
     </div>
     <div class="grp">
       <h4>Operate</h4>
-      <a href="auth.html">Auth &amp; mTLS</a>
-      <a href="dashboard.html" class="active">Dashboard &amp; metrics</a>
-      <a href="api.html">HTTP API</a>
+      <a href="../auth.html">Auth &amp; mTLS</a>
+      <a href="../dashboard.html">Dashboard &amp; metrics</a>
+      <a href="../api.html">HTTP API</a>
     </div>
     <div class="grp">
       <h4>Recipes</h4>
-      <a href="scenarios/index.html">Scenarios</a>
+      <a href="index.html" class="active">Scenarios</a>
     </div>
   </aside>
 
   <main class="doc-main">
-    <h1>Dashboard &amp; metrics</h1>
-    <ul>
-      <li><strong><code>/</code></strong> — a self-contained live dashboard (requests, tokens, latency, routing split, escalations, worker status), auto-refreshing, theme-aware.</li>
-      <li><strong><code>/stats</code></strong> — a JSON snapshot.</li>
-      <li><strong><code>/metrics</code></strong> — Prometheus text to scrape.</li>
-    </ul>
+    <h1>1 · Route automatically</h1>
+    <p class="lede"><code>model:"auto"</code> classifies the task and picks a tier; check <code>X-Selected-Model</code> to see who answered.</p>
+    <div class="code"><div class="top"><span>cheap task → cheap model</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+  -d '{"model":"auto","messages":[{"role":"user","content":"say hi"}]}'
+# → X-Selected-Model: gpt-cheap</pre></div>
+    <div class="code"><div class="top"><span>hard task → escalated model</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+  -d '{"model":"auto","messages":[{"role":"user","content":"design a distributed consensus protocol with proofs"}]}'
+# → X-Selected-Model: gpt-strong</pre></div>
+    <p>See the exact classification rules: <a class="link" href="../auto-routing.html">How <code>auto</code> decides</a>.</p>
 
-    <h2 id="service">Run as a service</h2>
-    <p>Keep routsi up across crashes and logins — launchd on macOS, systemd-user on Linux. No root; everything lives under your home dir.</p>
-    <div class="code"><div class="top"><span>watchdog</span><button class="copy">copy</button></div><pre>routsi install      # install + start (restart-on-failure, start-at-login)
-routsi status       # is it running?
-routsi uninstall    # stop + remove</pre></div>
-
-    <p style="margin-top:44px"><a class="btn btn-ghost" href="api.html">Next: HTTP API →</a></p>
+    <p style="margin-top:44px"><a class="btn btn-ghost" href="concrete-bypass.html">Next: Bypass to a concrete model →</a></p>
   </main>
 </div>
 
 <footer>
   <div class="wrap">
     <div class="brand"><span class="dot"></span>routsi</div>
-    <div><a href="../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div>
+    <div><a href="../../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div>
   </div>
 </footer>
 

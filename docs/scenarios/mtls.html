@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scenario: mTLS — routsi docs</title>
+<meta name="description" content="Generate a full CA + server + client chain, then require client certs.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<div class="bg"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="../../index.html"><span class="dot"></span>routsi</a>
+    <div class="nav-links">
+      <a href="../../index.html#compare">Compare</a>
+      <a href="../../index.html#who">Who it's for</a>
+      <a href="../index.html">Docs</a>
+      <button class="themebtn" id="theme" aria-label="Toggle theme">◑</button>
+      <a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<div class="docshell">
+  <aside class="sidebar">
+    <div class="grp">
+      <h4>Start here</h4>
+      <a href="../index.html">Overview</a>
+      <a href="../install.html">Install</a>
+      <a href="../quickstart.html">Quick start</a>
+      <a href="../concepts.html">Core concepts</a>
+    </div>
+    <div class="grp">
+      <h4>Configure</h4>
+      <a href="../configuration.html">models.yaml</a>
+      <a href="../routing.html">Routing &amp; stickiness</a>
+      <a href="../auto-routing.html">How auto decides</a>
+      <a href="../agents.html">Agents as models</a>
+      <a href="../workers.html">Pull-workers</a>
+    </div>
+    <div class="grp">
+      <h4>Operate</h4>
+      <a href="../auth.html">Auth &amp; mTLS</a>
+      <a href="../dashboard.html">Dashboard &amp; metrics</a>
+      <a href="../api.html">HTTP API</a>
+    </div>
+    <div class="grp">
+      <h4>Recipes</h4>
+      <a href="index.html" class="active">Scenarios</a>
+    </div>
+  </aside>
+
+  <main class="doc-main">
+    <h1>4 · mTLS</h1>
+    <p class="lede">Generate a full CA + server + client chain, then require client certs.</p>
+    <div class="code"><div class="top"><span>generate + configure</span><button class="copy">copy</button></div><pre>routsi certs   # → ~/.config/routsi/certs/{ca,server,client}.{crt,key}</pre></div>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>tls:
+  cert: ~/.config/routsi/certs/server.crt
+  key: ~/.config/routsi/certs/server.key
+  client_ca: ~/.config/routsi/certs/ca.crt</pre></div>
+    <div class="code"><div class="top"><span>call it</span><button class="copy">copy</button></div><pre>curl -i https://localhost:8080/v1/chat/completions \
+  --cacert ~/.config/routsi/certs/ca.crt \
+  --cert ~/.config/routsi/certs/client.crt \
+  --key ~/.config/routsi/certs/client.key \
+  -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}'
+# → 200. Omit --cert/--key → TLS handshake fails before the request is even read.</pre></div>
+
+    <p style="margin-top:44px"><a class="btn btn-ghost" href="agent-session.html">Next: Agent session that remembers →</a></p>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>routsi</div>
+    <div><a href="../../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div>
+  </div>
+</footer>
+
+<script>
+const root=document.documentElement,tb=document.getElementById('theme');
+const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;
+tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t);};
+document.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{const pre=b.closest('.code').querySelector('pre');navigator.clipboard.writeText(pre.innerText).then(()=>{const o=b.textContent;b.textContent='copied ✓';setTimeout(()=>b.textContent=o,1400);});});
+// scroll-spy: highlight in-page anchors only (cross-page sidebar links are untouched)
+const links=[...document.querySelectorAll('.sidebar a[href^="#"]')];
+const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const so=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active');}}),{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.doc-main h2[id]').forEach(h=>so.observe(h));
+</script>
+</body>
+</html>
