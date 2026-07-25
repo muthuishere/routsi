@@ -1,0 +1,178 @@
+// Package queue is a broker for "pull workers": instead of routsi shelling out
+// to a local agent CLI, a remote worker (someone's opencode/codex/claude loop)
+// registers a named queue, long-polls for questions, answers them, and posts
+// the answer back. A request routed to a queue blocks until a worker answers
+// or the context ends. Everything is in-memory and bounded.
+package queue
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/muthuishere/routsi/internal/api"
+)
+
+// Job is one question handed to a worker.
+type Job struct {
+	ID             string        `json:"id"`
+	Model          string        `json:"model"`
+	ConversationID string        `json:"conversation_id,omitempty"`
+	Messages       []api.Message `json:"messages"`
+
+	answer chan result
+}
+
+type result struct {
+	content string
+	err     error
+}
+
+type queue struct {
+	pending  chan *Job
+	mu       sync.Mutex
+	inflight map[string]*Job // handed out, awaiting an answer
+	lastSeen time.Time       // last worker poll — for liveness
+}
+
+// Broker holds named queues.
+type Broker struct {
+	mu         sync.RWMutex
+	queues     map[string]*queue
+	maxWait    time.Duration // cap on how long a request blocks for a worker
+	pendingCap int
+}
+
+func New() *Broker {
+	return &Broker{queues: map[string]*queue{}, maxWait: 5 * time.Minute, pendingCap: 256}
+}
+
+// Register creates the queue if absent and returns whether it now exists.
+// Idempotent — a worker reconnecting registers the same name harmlessly.
+func (b *Broker) Register(name string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, ok := b.queues[name]; !ok {
+		b.queues[name] = &queue{
+			pending:  make(chan *Job, b.pendingCap),
+			inflight: map[string]*Job{},
+			lastSeen: time.Now(),
+		}
+	}
+}
+
+// Exists reports whether a queue is registered (used for routing).
+func (b *Broker) Exists(name string) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	_, ok := b.queues[name]
+	return ok
+}
+
+// Names lists registered queues.
+func (b *Broker) Names() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	out := make([]string, 0, len(b.queues))
+	for n := range b.queues {
+		out = append(out, n)
+	}
+	return out
+}
+
+func (b *Broker) get(name string) *queue {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.queues[name]
+}
+
+// Submit enqueues a question and blocks until a worker answers, the context
+// ends, or maxWait elapses. Called from the request path.
+func (b *Broker) Submit(ctx context.Context, name string, req *api.ChatRequest) (string, error) {
+	q := b.get(name)
+	if q == nil {
+		return "", fmt.Errorf("queue %q has no registered worker", name)
+	}
+	job := &Job{
+		ID:             randID(),
+		Model:          req.Model,
+		ConversationID: req.ConversationID,
+		Messages:       req.Messages,
+		answer:         make(chan result, 1),
+	}
+	select {
+	case q.pending <- job:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+		return "", fmt.Errorf("queue %q is full", name)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, b.maxWait)
+	defer cancel()
+	select {
+	case r := <-job.answer:
+		return r.content, r.err
+	case <-ctx.Done():
+		q.drop(job.ID) // stop tracking; a late worker answer is discarded
+		return "", fmt.Errorf("queue %q: no worker answered in time: %w", name, ctx.Err())
+	}
+}
+
+// Poll is the worker long-poll: wait up to `wait` for the next job. Returns
+// (nil,false) on timeout. A handed-out job is tracked until Answer or expiry.
+func (b *Broker) Poll(ctx context.Context, name string, wait time.Duration) (*Job, bool) {
+	q := b.get(name)
+	if q == nil {
+		return nil, false
+	}
+	q.mu.Lock()
+	q.lastSeen = time.Now()
+	q.mu.Unlock()
+
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case job := <-q.pending:
+		q.mu.Lock()
+		q.inflight[job.ID] = job
+		q.mu.Unlock()
+		return job, true
+	case <-timer.C:
+		return nil, false
+	case <-ctx.Done():
+		return nil, false
+	}
+}
+
+// Answer delivers a worker's answer to the blocked Submit.
+func (b *Broker) Answer(name, jobID, content string) error {
+	q := b.get(name)
+	if q == nil {
+		return fmt.Errorf("queue %q not found", name)
+	}
+	q.mu.Lock()
+	job, ok := q.inflight[jobID]
+	delete(q.inflight, jobID)
+	q.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("job %q not in flight (expired or already answered)", jobID)
+	}
+	job.answer <- result{content: content}
+	return nil
+}
+
+func (q *queue) drop(jobID string) {
+	q.mu.Lock()
+	delete(q.inflight, jobID)
+	q.mu.Unlock()
+}
+
+func randID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}

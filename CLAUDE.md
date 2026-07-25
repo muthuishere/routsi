@@ -12,14 +12,30 @@ Language: **Go** (module `github.com/muthuishere/routsi`). Task runner: **Taskfi
 > how to add a backend/agent/router, invariants). This file adds the living project
 > state, decisions, and caveats below.
 
-## Workflow (collapsed 2026-07-23 — owner chose speed over ceremony)
+## Workflow (2026-07-23 — full ceremony; the project is going big)
 
-- Architectural decisions get a **short ADR discussion** in chat (evidence lives in
-  `docs/research/`); big new subsystems may warrant an OpenSpec change — ask first.
-- Implementation is **test-alongside**: table-driven tests, standard `testing` package,
-  `httptest` mock upstreams for anything touching the wire. `go vet ./...` +
-  `go test ./...` (`task test`) must pass before done.
-- Small changes: just do them.
+Non-trivial work moves through four gates **in order**. Update this file at the end.
+
+1. **ADR** — `docs/adr/NNN-title.md`, one decision per file: Status
+   (Proposed/Accepted/Superseded) · Context · Decision · Alternatives · Consequences ·
+   Open questions. Discuss in chat, cite `docs/research/`; get explicit OK before
+   Accepted. **No code embodying a Proposed decision is committed.**
+2. **Spike** — `docs/spikes/NNN-*.md`: a throwaway proof-of-concept that de-risks the ADR
+   (does the API exist? does the timing/protocol work?). Evidence + findings, not
+   production code; any code stays in the spike doc or a `_`-prefixed dir, out of the
+   build.
+3. **OpenSpec** — after the ADR is Accepted: `openspec/changes/<id>/` (proposal + spec
+   deltas + tasks) referencing the ADR number. `openspec validate`; walk through before
+   coding. `openspec archive` when done.
+4. **Implementation (TDD)** — red→green→refactor, table-driven tests, `httptest` mock
+   upstreams for wire code. `go vet ./...` + `go test ./...` (`task test`) green. Tick
+   OpenSpec tasks as completed.
+
+Trivial changes (typos, docs, dep bumps): skip the gates. When unsure, it isn't trivial.
+
+> **Earlier phases (catalog API, agents, discovery, dynamic groups, auth/mTLS, service,
+> metrics, dashboard) were built in a collapsed "speed over ceremony" mode.** That mode
+> is retired as of ADR-001; new subsystems follow the four gates above.
 
 ## Repo shape
 
