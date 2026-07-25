@@ -1,6 +1,6 @@
 # ADR-005: Agent-skill worker (turn any agent into a provider)
 
-- **Status:** Proposed (discussion)
+- **Status:** Accepted (2026-07-25)
 - **Date:** 2026-07-25
 - **Depends on:** ADR-001 (pull-worker transport), ADR-002 (provider), ADR-004 (status)
 

@@ -9,17 +9,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/muthuishere/routsi/internal/api"
 	"github.com/muthuishere/routsi/internal/backend"
 	"github.com/muthuishere/routsi/internal/config"
 	"github.com/muthuishere/routsi/internal/metrics"
+	"github.com/muthuishere/routsi/internal/queue"
 	"github.com/muthuishere/routsi/internal/router"
 	"github.com/muthuishere/routsi/internal/sticky"
 )
@@ -42,6 +45,10 @@ type Server struct {
 	targets  map[string]*target
 	metrics  *metrics.Collector
 	tokens   []string // bearer tokens; empty = auth off
+	broker   *queue.Broker
+
+	dmu     sync.RWMutex       // guards dynamic (runtime-registered) queue targets
+	dynamic map[string]*target // queue name -> target, added on worker register
 }
 
 func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, error) {
@@ -59,6 +66,8 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 		targets:  map[string]*target{},
 		metrics:  metrics.New(),
 		tokens:   cfg.Auth.AuthTokens(),
+		broker:   queue.New(),
+		dynamic:  map[string]*target{},
 	}
 	for i := range cfg.Models {
 		m := &cfg.Models[i]
@@ -77,6 +86,11 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 			t.backend = backend.NewDevin(m)
 		case m.Type == config.TypeCodex || m.Type == config.TypeCopilot || m.Type == config.TypeClaude:
 			t.backend = backend.NewCLIAgent(m)
+		case m.Type == config.TypeQueue:
+			// Config-declared queue reserves the name; a worker supplies
+			// answers at runtime via the broker.
+			s.broker.Register(m.Name)
+			t.backend = backend.NewQueue(s.broker, m.Name)
 		default:
 			b, err := reg.Get(m.Handler)
 			if err != nil {
@@ -123,6 +137,12 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(s.metrics.Snapshot())
 	}))
+	// Worker (pull-worker) endpoints — no worker auth in v1 (ADR-001); the
+	// status list rides the same guard as /stats.
+	mux.HandleFunc("POST /v1/workers/register", s.workerRegister)
+	mux.HandleFunc("GET /v1/workers/{name}/jobs", s.workerPoll)
+	mux.HandleFunc("POST /v1/workers/{name}/jobs/{id}", s.workerAnswer)
+	mux.HandleFunc("GET /v1/workers", s.guard(s.workers))
 	// Open: liveness, and the dashboard shell (holds no data; it fetches /stats
 	// with the token the operator passes as /?token=...).
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
@@ -204,7 +224,14 @@ func (s *Server) resolve(req *api.ChatRequest, convID string) (*target, decision
 	if m := s.cfg.Model(req.Model); m != nil && m.Type == config.TypeDynamic {
 		return s.resolveGroup(m.Name, m.Levels, req, convID)
 	}
-	return s.targets[req.Model], decision{}
+	if t := s.targets[req.Model]; t != nil {
+		return t, decision{}
+	}
+	// A worker that registered at runtime is addressable by its queue name.
+	s.dmu.RLock()
+	t := s.dynamic[req.Model]
+	s.dmu.RUnlock()
+	return t, decision{}
 }
 
 func (s *Server) resolveGroup(group string, levels map[string]string, req *api.ChatRequest, convID string) (*target, decision) {
@@ -237,6 +264,85 @@ func (s *Server) resolveGroup(group string, levels map[string]string, req *api.C
 	return s.targets[picked], decision{routed: true}
 }
 
+// backendStatus maps a backend error to an HTTP status. A queue with no live
+// worker fails fast as 503 (ADR-001) so callers don't hang.
+func backendStatus(err error) int {
+	if errors.Is(err, queue.ErrNoWorker) {
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusBadGateway
+}
+
+// --- worker (pull-worker) endpoints ---
+
+func (s *Server) workerRegister(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil || body.Name == "" {
+		httpError(w, http.StatusBadRequest, "register: JSON body {\"name\":\"...\"} required")
+		return
+	}
+	name := body.Name
+	// A worker may not shadow a configured model or the router aliases.
+	if name == RouterModel || s.cfg.Model(name) != nil || s.cfg.Tiers[name] != "" {
+		if m := s.cfg.Model(name); m == nil || m.Type != config.TypeQueue {
+			httpError(w, http.StatusConflict, "name %q is reserved by a configured model", name)
+			return
+		}
+	}
+	s.broker.Register(name)
+	s.dmu.Lock()
+	if s.dynamic[name] == nil && s.cfg.Model(name) == nil {
+		s.dynamic[name] = &target{
+			model:   &config.Model{Name: name, Type: config.TypeQueue, Provider: "worker"},
+			backend: backend.NewQueue(s.broker, name),
+		}
+	}
+	s.dmu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "queue": name})
+}
+
+func (s *Server) workerPoll(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	wait := 25 * time.Second
+	if q := r.URL.Query().Get("wait"); q != "" {
+		if d, err := time.ParseDuration(q + "s"); err == nil && d > 0 && d <= 60*time.Second {
+			wait = d
+		}
+	}
+	job, ok := s.broker.Poll(r.Context(), name, wait)
+	if !ok {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(job)
+}
+
+func (s *Server) workerAnswer(w http.ResponseWriter, r *http.Request) {
+	name, id := r.PathValue("name"), r.PathValue("id")
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 20<<20)).Decode(&body); err != nil {
+		httpError(w, http.StatusBadRequest, "answer: JSON body {\"content\":\"...\"} required")
+		return
+	}
+	if err := s.broker.Answer(name, id, body.Content); err != nil {
+		httpError(w, http.StatusConflict, "answer: %v", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+func (s *Server) workers(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"workers": s.broker.States()})
+}
+
 // levelOf finds the highest level a member is mapped to within a group.
 func levelOf(levels map[string]string, member string) string {
 	best, bestRank := "", -1
@@ -254,7 +360,7 @@ func (s *Server) envelope(w http.ResponseWriter, r *http.Request, t *target, req
 	if !req.Stream {
 		text, err := t.backend.Complete(r.Context(), req)
 		if err != nil {
-			httpError(w, http.StatusBadGateway, "backend %s: %v", t.model.Name, err)
+			httpError(w, backendStatus(err), "backend %s: %v", t.model.Name, err)
 			return nil, err
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -314,6 +420,12 @@ func (s *Server) models(w http.ResponseWriter, _ *http.Request) {
 	for _, mm := range s.cfg.Models {
 		list = append(list, m{ID: mm.Name, Object: "model", OwnedBy: mm.Provider})
 	}
+	// Runtime-registered worker queues are routable models too.
+	s.dmu.RLock()
+	for name := range s.dynamic {
+		list = append(list, m{ID: name, Object: "model", OwnedBy: "worker"})
+	}
+	s.dmu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": list})
 }

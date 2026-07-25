@@ -4,6 +4,14 @@ listen: ":8080"
 default: gpt-cheap
 sticky_ttl: 10m
 
+# Pull-workers (ADR-001): a remote agent registers a queue and answers requests
+# routed to it. No worker auth in v1 — reserved placeholder:
+workers:
+  auth: {}
+# A config-declared queue reserves a name (workers also register dynamically):
+#   - name: my-remote-agent
+#     type: queue
+
 # routsi config. Dashboard at http://<listen>/  ·  /stats (json)  ·  /metrics (prom).
 # May also live at ~/.config/routsi/models.yaml. Run as a service: `routsi install`.
 

@@ -108,6 +108,22 @@ models.yaml           # sample config
 - Fingerprint ids (`fp-` prefix, hashed first user message) are for routing stickiness
   ONLY — they must never trigger proxy-managed memory.
 
+## Pull-workers (ADR-001, shipped 2026-07-25)
+
+First feature under the restored ADR→spike→OpenSpec→TDD workflow. **Additive** — nothing
+existing changed. A remote worker registers a named queue and answers requests routed to
+it (`internal/queue` broker; `type: queue` backend; `POST /v1/workers/register`, `GET
+/v1/workers/{name}/jobs?wait=`, `POST /v1/workers/{name}/jobs/{id}`, `GET /v1/workers`
+status). Queue is a routable model; dynamic registration adds it at runtime (server
+`dynamic` map, mutex-guarded); fast-503 when no worker polled recently; one worker per
+queue; non-streaming; at-most-once; no worker auth in v1 (reserved `workers.auth: {}`).
+`routsi worker run|scaffold` CLI + an embedded agent skill installed via `routsi install
+--skills` (→ ~/.claude/skills, ~/.codex/skills; skill source at cmd/routsi/skills/).
+Live-verified: proxy + `routsi worker` loop answered a real chat request end-to-end;
+status/dynamic-register/collision/skills-install all checked. OpenSpec change archived
+(2026-07-25-add-pull-worker). ADR-002/003 (unified-registry + control-plane refactor)
+**parked** — owner scoped to additive only.
+
 ## Current state (2026-07-23)
 
 Phase 1 built and tested: routing (`auto` + rules), bypass, stickiness with

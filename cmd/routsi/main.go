@@ -52,6 +52,8 @@ func main() {
 		genTokens()
 	case "certs":
 		genCerts()
+	case "worker":
+		worker()
 	case "version", "-v", "--version":
 		fmt.Println("routsi", version)
 	case "help", "-h", "--help":
@@ -69,6 +71,9 @@ func usage() {
 usage:
   routsi [serve] [-config path]   run the server (default)
   routsi install  [-config path]  install as a keep-alive background service
+  routsi install  --skills        install the agent skill(s) into ~/.claude, ~/.codex
+  routsi worker   run  --proxy URL --queue NAME --agent 'cmd'   run a pull-worker
+  routsi worker   scaffold        print an editable curl worker script
   routsi uninstall                remove the service
   routsi status                   is the service running?
   routsi token [-n count]         generate API bearer tokens for auth.tokens_env
@@ -174,10 +179,15 @@ Clients authenticate with it as their OpenAI api_key
 
 func manage(action string) {
 	cfgPath := flag.String("config", "", "path to models.yaml")
+	skills := flag.Bool("skills", false, "install the agent skill(s) into global skill dirs")
 	flag.Parse()
 
 	switch action {
 	case "install":
+		if *skills {
+			installSkills()
+			return
+		}
 		bin, err := os.Executable()
 		if err != nil {
 			log.Fatalf("cannot locate own binary: %v", err)

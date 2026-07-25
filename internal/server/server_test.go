@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -559,5 +560,113 @@ models:
 	r4, _ := http.Get(ts.URL + "/health")
 	if r4.StatusCode != http.StatusOK {
 		t.Fatalf("/health guarded: %d", r4.StatusCode)
+	}
+}
+
+// TestPullWorkerEndToEnd: register a queue, a goroutine "worker" long-polls and
+// answers, and a chat request to that queue name gets the worker's answer.
+// Also checks fast-503 when no worker is present, and the /v1/workers status.
+func TestPullWorkerEndToEnd(t *testing.T) {
+	var x string
+	up := mockUpstream(t, "u", &x)
+	defer up.Close()
+	up2 := mockUpstream(t, "u2", &x)
+	defer up2.Close()
+	ts := testServer(t, up.URL, up2.URL, echoRegistry())
+
+	// An unregistered queue name is genuinely unknown → 404.
+	resp := post(t, ts.URL, `{"model":"remote-1","messages":[{"role":"user","content":"hi"}]}`, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("unregistered: status %d, want 404", resp.StatusCode)
+	}
+
+	// Register (name now known/routable).
+	rr, _ := http.Post(ts.URL+"/v1/workers/register", "application/json", strings.NewReader(`{"name":"remote-1"}`))
+	if rr.StatusCode != http.StatusOK {
+		t.Fatalf("register: %d", rr.StatusCode)
+	}
+	rr.Body.Close()
+
+	// Registered but no worker has polled → fast 503.
+	resp = post(t, ts.URL, `{"model":"remote-1","messages":[{"role":"user","content":"hi"}]}`, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("registered-no-poll: status %d, want 503", resp.StatusCode)
+	}
+
+	// Worker: poll then answer.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r, err := http.Get(ts.URL + "/v1/workers/remote-1/jobs?wait=5")
+		if err != nil || r.StatusCode != http.StatusOK {
+			t.Errorf("poll: %v status=%v", err, r.StatusCode)
+			return
+		}
+		var job struct {
+			ID       string `json:"id"`
+			Messages []struct {
+				Content json.RawMessage `json:"content"`
+			} `json:"messages"`
+		}
+		json.NewDecoder(r.Body).Decode(&job)
+		r.Body.Close()
+		ab, _ := json.Marshal(map[string]string{"content": "worker says hi"})
+		pr, _ := http.Post(ts.URL+"/v1/workers/remote-1/jobs/"+job.ID, "application/json", bytes.NewReader(ab))
+		pr.Body.Close()
+	}()
+
+	// Give the worker's poll a moment to land (become present), then ask.
+	var got string
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		resp = post(t, ts.URL, `{"model":"remote-1","messages":[{"role":"user","content":"question"}]}`, nil)
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			var cr api.ChatResponse
+			json.Unmarshal(b, &cr)
+			got = cr.Choices[0].Message.Content
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	<-done
+	if got != "worker says hi" {
+		t.Fatalf("answer via worker = %q", got)
+	}
+
+	// Status lists the queue.
+	sr, _ := http.Get(ts.URL + "/v1/workers")
+	var st struct {
+		Workers []struct {
+			Name   string `json:"name"`
+			Served int64  `json:"served"`
+		} `json:"workers"`
+	}
+	json.NewDecoder(sr.Body).Decode(&st)
+	sr.Body.Close()
+	if len(st.Workers) != 1 || st.Workers[0].Name != "remote-1" || st.Workers[0].Served != 1 {
+		t.Fatalf("status = %+v", st.Workers)
+	}
+}
+
+// TestWorkerNameCollisionRejected: a worker cannot shadow a configured model.
+func TestWorkerNameCollisionRejected(t *testing.T) {
+	var x string
+	up := mockUpstream(t, "u", &x)
+	defer up.Close()
+	up2 := mockUpstream(t, "u2", &x)
+	defer up2.Close()
+	ts := testServer(t, up.URL, up2.URL, echoRegistry())
+
+	rr, err := http.Post(ts.URL+"/v1/workers/register", "application/json", strings.NewReader(`{"name":"gpt-cheap"}`))
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	defer rr.Body.Close()
+	if rr.StatusCode != http.StatusConflict {
+		t.Fatalf("collision: status %d, want 409", rr.StatusCode)
 	}
 }

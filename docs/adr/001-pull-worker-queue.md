@@ -1,6 +1,6 @@
 # ADR-001: Pull-worker queue (remote agents answer via a broker)
 
-- **Status:** Proposed (discussion)
+- **Status:** Accepted (2026-07-25)
 - **Date:** 2026-07-23
 - **Deciders:** owner + routsi
 - **Part of the provider arc:** this is the pull-worker *kind* under
@@ -39,7 +39,7 @@ Add a **`type: queue`** backend and a small worker protocol.
 - `Poll(ctx, name, wait) (*Job, bool)` — worker long-poll for the next job.
 - `Answer(name, jobID, content)` — worker returns the answer to the blocked Submit.
 
-**Worker HTTP API** (under `/v1/workers/…`, guarded by the same bearer token as the API):
+**Worker HTTP API** (under `/v1/workers/…`; no worker auth in v1 — reserved placeholder):
 - `POST /v1/workers/register` `{ "name": "alices-opencode" }` → registers the queue.
 - `GET  /v1/workers/{name}/jobs?wait=25` → long-poll; `200 {id, model, conversation_id,
   messages}` or `204` on timeout.
@@ -115,16 +115,5 @@ Costs / open risks:
 - **Dynamic registration** is the headline (anyone can join); a config-declared
   `type: queue` may reserve a name too.
 
-## Open questions for the owner
-
-1. **Dynamic registration only, or also config-declared queues?** (I lean: support both —
-   dynamic is the headline, config-declared reserves a name.)
-2. **Zero-worker behaviour:** fast 503 when no worker has polled recently, vs block to
-   timeout? (I lean: fast 503.)
-3. **One-worker-per-queue for v1** (simplest sticky story), or allow a pool now?
-4. **Worker skill form:** shell script only, or also a tiny Node file? (Earlier you said
-   CLI-only; a curl shell script keeps it dependency-free.)
-5. **Auth for workers:** reuse the same `auth.tokens_env` bearer (simplest), or a separate
-   worker-token list?
-
-Nothing lands until this is Accepted.
+All open questions resolved in the Decisions section above (2026-07-25). Accepted →
+implemented via OpenSpec change `add-pull-worker`.

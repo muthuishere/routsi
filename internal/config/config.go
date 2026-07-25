@@ -22,6 +22,7 @@ const (
 	TypeCopilot ModelType = "copilot"
 	TypeClaude  ModelType = "claude"
 	TypeDynamic ModelType = "dynamic"
+	TypeQueue   ModelType = "queue" // pull-worker queue (ADR-001)
 )
 
 // CLIAgent reports whether the type shells out to a local agent CLI.
@@ -100,6 +101,14 @@ type Config struct {
 	Models    []Model           `yaml:"models"`
 	Auth      AuthConfig        `yaml:"auth"`
 	TLS       TLSConfig         `yaml:"tls"`
+	Workers   WorkersConfig     `yaml:"workers"`
+}
+
+// WorkersConfig is the pull-worker (ADR-001) settings block. In v1 it only
+// carries a reserved, empty auth placeholder so worker auth can be added later
+// without a breaking config change.
+type WorkersConfig struct {
+	Auth map[string]any `yaml:"auth"` // reserved — no worker auth in v1
 }
 
 // AuthConfig gates the API with bearer tokens. Prefer tokens_env (values in the
@@ -249,6 +258,9 @@ func (c *Config) validate() error {
 			if m.Handler == "" {
 				return fmt.Errorf("config: custom model %q needs handler", m.Name)
 			}
+		case TypeQueue:
+			// A config-declared queue only reserves a name; a worker supplies
+			// the answers at runtime. Nothing else to validate.
 		case TypeDynamic:
 			if len(m.Levels) == 0 {
 				return fmt.Errorf("config: dynamic model %q needs levels", m.Name)

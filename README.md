@@ -73,6 +73,30 @@ With tokens on: `/v1/*`, `/stats`, `/metrics` need `Authorization: Bearer <tok>`
 The chosen model is returned in the `X-Selected-Model` header. Every response
 carries a `usage` block.
 
+## Pull-workers: let anyone plug in their agent
+
+Instead of routsi hosting an agent CLI, a **remote worker** can join and answer — run
+your own opencode/codex/claude anywhere, register a queue, answer questions the proxy
+routes to it. Credentials never leave your machine; the worker is outbound-only.
+
+```sh
+# on the worker machine (any machine with your agent logged in):
+routsi worker run --proxy https://your-proxy:8080 --queue my-agent \
+  --agent 'codex exec --skip-git-repo-check -'    # reads the question on stdin, prints the answer
+```
+
+Now `{"model":"my-agent"}` routes to that worker. It's a normal model — shows in
+`/v1/models`, `GET /v1/workers` (live status: state, last-seen, served, errors), and the
+dashboard Workers panel. If no worker is live, requests fast-fail with `503`. No worker
+auth in v1 (reserved `workers.auth` config placeholder). `routsi worker scaffold` prints
+an editable curl-only version.
+
+Install the worker as an **agent skill** so any agent session can become a worker:
+
+```sh
+routsi install --skills     # into ~/.claude/skills and ~/.codex/skills
+```
+
 ## Run it as a service (watchdog)
 
 Keeps routsi up across crashes and logins — launchd on macOS, systemd-user on Linux:

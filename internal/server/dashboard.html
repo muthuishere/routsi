@@ -36,6 +36,7 @@
   .tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;background:var(--line);color:var(--mut)}
   footer{color:var(--mut);font-size:12px;text-align:center;padding:20px}
   .empty{color:var(--mut);text-align:center;padding:40px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .wdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -46,6 +47,7 @@
 </header>
 <div class="wrap">
   <div class="cards" id="cards"></div>
+  <div id="workerswrap"></div>
   <div id="tablewrap"></div>
 </div>
 <footer>auto-refreshing every 3s · <span id="ts"></span></footer>
@@ -94,6 +96,29 @@ async function tick(){
   }).join('');
   document.getElementById('tablewrap').innerHTML =
     `<table><thead><tr><th>Model</th><th>Requests</th><th>Escalations</th><th>Tokens</th><th>Avg</th><th>Max</th><th>Errors</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  tickWorkers();
+}
+
+const STATE_COLOR = {online:'var(--ok)', busy:'var(--warn)', stale:'var(--mut)', reserved:'var(--line)'};
+async function tickWorkers(){
+  const opts = TOKEN ? {headers:{Authorization:'Bearer '+TOKEN}} : {};
+  let d; try{ const r = await fetch('/v1/workers', opts); if(!r.ok){ document.getElementById('workerswrap').innerHTML=''; return; } d = await r.json(); }catch(e){ return; }
+  const ws = (d.workers||[]);
+  if(!ws.length){ document.getElementById('workerswrap').innerHTML=''; return; }
+  const rows = ws.sort((a,b)=>a.name<b.name?-1:1).map(w=>{
+    const seen = w.last_seen_sec<0 ? '—' : dur(w.last_seen_sec)+' ago';
+    return `<tr>
+      <td><span class="wdot" style="background:${STATE_COLOR[w.state]||'var(--mut)'}"></span><b>${esc(w.name)}</b>
+          <span class="prov">${w.state}</span></td>
+      <td>${seen}</td><td>${w.in_flight||'—'}</td><td>${w.served||'—'}</td>
+      <td class="${w.errored?'err':''}">${w.errored||'—'}</td>
+      <td class="prov" style="text-align:left">${w.last_error?esc(w.last_error):''}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('workerswrap').innerHTML =
+    `<h2 style="font-size:14px;color:var(--mut);margin:8px 4px">Workers</h2>
+     <table style="margin-bottom:20px"><thead><tr><th>Queue</th><th>Last seen</th><th>In-flight</th><th>Served</th><th>Errors</th><th>Last error</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function esc(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function showAuth(){
