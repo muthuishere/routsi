@@ -111,7 +111,8 @@ h1.big{font-size:clamp(38px,5.6vw,62px);font-weight:700}
 @keyframes blink{50%{opacity:0}}
 
 /* ---- sections ---- */
-section{padding:64px 0}
+section{padding:88px 0;scroll-margin-top:80px}
+header{scroll-margin-top:80px}
 .sec-head{max-width:640px;margin-bottom:44px}
 .sec-head .kicker{color:var(--violet);font-weight:600;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
 .sec-head h2{font-size:clamp(28px,3.6vw,40px);margin:12px 0 14px}
@@ -125,8 +126,10 @@ section{padding:64px 0}
 .vs .us{background:linear-gradient(160deg,color-mix(in srgb,var(--violet-deep) 22%,var(--panel)),var(--panel));border-color:var(--violet)}
 .vs h3{font-size:20px;margin-bottom:14px;display:flex;align-items:center;gap:9px}
 .vs ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:11px}
-.vs li{display:flex;gap:10px;font-size:15.5px;line-height:1.45}
-.vs li .mk{flex:none;font-weight:700}
+.vs li{display:flex;gap:10px;align-items:flex-start;font-size:15.5px;line-height:1.5}
+.vs li .mk{flex:none;font-weight:700;line-height:1.5}
+.vs li .tx{flex:1}
+.vs li .tx b,.vs li .tx code{white-space:normal}
 .them li .mk{color:var(--fg-mute)}.us li .mk{color:var(--cyan)}
 
 /* feature grid */
@@ -152,10 +155,12 @@ section{padding:64px 0}
 .spot h2{font-size:clamp(26px,3.4vw,38px);margin-bottom:16px}
 .spot p{color:var(--fg-dim);font-size:16.5px;margin-bottom:16px}
 .spot ol{margin:0;padding-left:0;list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:14px}
-.spot ol li{counter-increment:s;display:flex;gap:14px;font-size:15px;color:var(--fg)}
+.spot ol li{counter-increment:s;display:flex;gap:14px;align-items:flex-start;font-size:15px;color:var(--fg);line-height:1.55}
 .spot ol li::before{content:counter(s);flex:none;width:28px;height:28px;border-radius:50%;background:var(--grad);
   color:#fff;font-weight:700;font-family:var(--display);display:grid;place-items:center;font-size:14px}
-.spot ol li b{font-family:var(--mono);color:var(--cyan);font-weight:500}
+.spot ol li .tx{flex:1}
+.spot ol li b{font-family:var(--mono);color:var(--cyan);font-weight:500;white-space:normal}
+.spot ol li code{white-space:normal;word-break:break-word}
 
 /* code block */
 .code{background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius-sm);
@@ -194,7 +199,7 @@ footer a{color:var(--fg-dim)}footer a:hover{color:var(--fg)}
     <a class="brand" href="#top"><span class="dot"></span>routsi</a>
     <div class="nav-links">
       <a href="#different">Why it's different</a>
-      <a href="#devin">Devin</a>
+      <a href="#devin">Agents</a>
       <a href="#features">Features</a>
       <a href="#start">Start</a>
       <button class="themebtn" id="theme" aria-label="Toggle theme">◑</button>
@@ -237,19 +242,19 @@ footer a{color:var(--fg-dim)}footer a:hover{color:var(--fg)}
     <div class="card them">
       <h3>🔀 Typical LLM gateway</h3>
       <ul>
-        <li><span class="mk">–</span>Load-balances one model across providers</li>
-        <li><span class="mk">–</span>Fallback when a provider is down</li>
-        <li><span class="mk">–</span>You still decide which model, every call</li>
-        <li><span class="mk">–</span>A hosted platform you depend on</li>
+        <li><span class="mk">–</span><span class="tx">Load-balances one model across providers</span></li>
+        <li><span class="mk">–</span><span class="tx">Fallback when a provider is down</span></li>
+        <li><span class="mk">–</span><span class="tx">You still decide which model, every call</span></li>
+        <li><span class="mk">–</span><span class="tx">A hosted platform you depend on</span></li>
       </ul>
     </div>
     <div class="card us">
       <h3>⚡ routsi</h3>
       <ul>
-        <li><span class="mk">✓</span>Routes across <b>models AND full agents</b> (Devin, Codex, Copilot, Claude Code)</li>
-        <li><span class="mk">✓</span>Classifies the task → cheap / strong / agent, automatically</li>
-        <li><span class="mk">✓</span>Sticky per conversation, escalate-only — never downgrades mid-thread</li>
-        <li><span class="mk">✓</span>One dependency-light binary <b>you</b> run — not a platform</li>
+        <li><span class="mk">✓</span><span class="tx">Routes across <b>models AND full agents</b> — any agent (Devin, Codex, Copilot, Claude Code…)</span></li>
+        <li><span class="mk">✓</span><span class="tx">Classifies the task → cheap / strong / agent, automatically</span></li>
+        <li><span class="mk">✓</span><span class="tx">Sticky per conversation, escalate-only — never downgrades mid-thread</span></li>
+        <li><span class="mk">✓</span><span class="tx">One dependency-light binary <b>you</b> run — not a platform</span></li>
       </ul>
     </div>
   </div>
@@ -261,28 +266,28 @@ footer a{color:var(--fg-dim)}footer a:hover{color:var(--fg)}
       <div>
         <span class="tag">◆ Agent spotlight</span>
         <h2>Route to a <span class="grad-text">real agent</span>, not just a model.</h2>
-        <p>Most routers stop at models. routsi treats <b>Devin</b> as a first-class model — <code>devin/claude-opus-4.8</code> — so a hard task can be handed to a full autonomous agent, and the whole thing still speaks OpenAI.</p>
-        <p>Getting the best out of Devin comes down to <em>conversation identity</em>: give routsi an <code>X-Conversation-Id</code> and it maps that thread to a <b>real Devin session</b> — resuming it (<code>devin -r</code>) on every later turn, so Devin keeps its context across calls.</p>
+        <p>Most routers stop at models. routsi treats <b>any agent</b> — Devin, Codex, Copilot, Claude Code — as a first-class model (e.g. <code>devin/claude-opus-4.8</code>), so a hard task gets handed to a full autonomous agent while the whole thing still speaks OpenAI.</p>
+        <p>The trick is <em>conversation identity</em>: give routsi an <code>X-Conversation-Id</code> and it maps that thread to a <b>real agent session</b> — resuming it on every later turn, so the agent keeps its context across calls.</p>
       </div>
       <div>
         <ol>
-          <li>Name the agent as a model: <b>"model":"devin/claude-opus-4.8"</b> — routsi runs <code>devin --model …</code>.</li>
-          <li>Pass <b>X-Conversation-Id</b> once. First turn opens a Devin session; routsi captures its id.</li>
-          <li>Every next turn <b>resumes that session</b> — Devin remembers the plan, the repo, the decisions.</li>
-          <li>Or let routing decide: set a dynamic group's <b>high: devin/claude-opus-4.8</b> — cheap questions hit a small model, hard ones escalate straight to Devin.</li>
+          <li><span class="tx">Name any agent as a model — <b>"model":"devin/claude-opus-4.8"</b> (or <code>codex/…</code>, <code>copilot/…</code>, <code>claude/…</code>). routsi runs that agent's CLI.</span></li>
+          <li><span class="tx">Pass <b>X-Conversation-Id</b> once. The first turn opens a real agent session; routsi captures its id.</span></li>
+          <li><span class="tx">Every next turn <b>resumes that session</b> — the agent remembers the plan, the repo, the decisions.</span></li>
+          <li><span class="tx">Or let routing decide: set a dynamic group's <b>high: devin/claude-opus-4.8</b> — cheap questions hit a small model, hard ones escalate straight to an agent.</span></li>
         </ol>
       </div>
     </div>
     <div style="position:relative;margin-top:30px">
       <div class="code">
-        <div class="top"><span>hard task → real Devin session, OpenAI wire</span><button class="copy">copy</button></div>
+        <div class="top"><span>hard task → real agent session, OpenAI wire</span><button class="copy">copy</button></div>
 <pre>curl localhost:8080/v1/chat/completions \
   -H 'content-type: application/json' \
   -H 'X-Conversation-Id: refactor-thread-1' \
   -d '{"model":"devin/claude-opus-4.8",
        "messages":[{"role":"user","content":"draft a refactor plan"}]}'
 
-# next turn, same header → Devin RESUMES the session, keeps its context
+# next turn, same header → the agent RESUMES the session, keeps its context
 # response header:  X-Selected-Model: devin/claude-opus-4.8</pre>
       </div>
     </div>
