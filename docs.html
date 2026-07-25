@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>routsi docs — install, config, routing, agents, workers</title>
+<meta name="description" content="routsi documentation: install from npm or a release, configure models.yaml, task-aware routing, agents as models, pull-workers, auth & mTLS, dashboard and the HTTP API.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="bg"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="dot"></span>routsi</a>
+    <div class="nav-links">
+      <a href="index.html#compare">Compare</a>
+      <a href="index.html#who">Who it's for</a>
+      <a href="docs.html">Docs</a>
+      <button class="themebtn" id="theme" aria-label="Toggle theme">◑</button>
+      <a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<div class="docshell">
+  <aside class="sidebar">
+    <div class="grp">
+      <h4>Start here</h4>
+      <a href="#install">Install</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#concepts">Core concepts</a>
+    </div>
+    <div class="grp">
+      <h4>Configure</h4>
+      <a href="#config">models.yaml</a>
+      <a href="#routing">Routing &amp; stickiness</a>
+      <a href="#agents">Agents as models</a>
+      <a href="#workers">Pull-workers</a>
+    </div>
+    <div class="grp">
+      <h4>Operate</h4>
+      <a href="#auth">Auth &amp; mTLS</a>
+      <a href="#dashboard">Dashboard &amp; metrics</a>
+      <a href="#service">Run as a service</a>
+      <a href="#api">HTTP API</a>
+    </div>
+  </aside>
+
+  <main class="doc-main">
+    <h1>routsi documentation</h1>
+    <p class="lede">One OpenAI-compatible endpoint that routes each request to the right model or agent. Get it, point an SDK at it, and let it decide.</p>
+
+    <h2 id="install">Install</h2>
+    <p>routsi ships as a single binary. Three ways to get it — pick one.</p>
+    <h3>npm (recommended)</h3>
+    <p>The npm package's <code>postinstall</code> downloads the right prebuilt binary for your OS/arch from GitHub Releases — no Go toolchain, no building from source.</p>
+    <div class="code"><div class="top"><span>install globally</span><button class="copy">copy</button></div><pre>npm install -g routsi
+routsi version</pre></div>
+    <h3>Prebuilt release binary</h3>
+    <p>Grab the archive for your platform from the <a class="link" href="https://github.com/muthuishere/routsi/releases" target="_blank" rel="noopener">releases page</a>, unpack, and put <code>routsi</code> on your <code>PATH</code>.</p>
+    <h3>From source</h3>
+    <div class="code"><div class="top"><span>Go 1.22+ · Taskfile v3</span><button class="copy">copy</button></div><pre>git clone https://github.com/muthuishere/routsi &amp;&amp; cd routsi
+task build          # → bin/routsi (version-stamped)
+task install        # → ~/.local/bin/routsi</pre></div>
+
+    <h2 id="quickstart">Quick start</h2>
+    <p>Drop a config, start the server, call it like OpenAI.</p>
+    <div class="code"><div class="top"><span>1 · config &amp; run</span><button class="copy">copy</button></div><pre>cp models.yaml ~/.config/routsi/   # or keep ./models.yaml
+routsi serve                       # listens on :8080
+routsi serve -port 9000            # …or override the port</pre></div>
+    <div class="code"><div class="top"><span>2 · call it (any OpenAI SDK works)</span><button class="copy">copy</button></div><pre>curl localhost:8080/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{"model":"auto","messages":[{"role":"user","content":"hello"}]}'</pre></div>
+    <div class="callout">The chosen answerer is returned in the <b>X-Selected-Model</b> response header, and every response carries a <b>usage</b> block.</div>
+
+    <h2 id="concepts">Core concepts</h2>
+    <ul>
+      <li><strong><code>model: "auto"</code></strong> — routsi classifies the task (low / medium / high) and picks a tier.</li>
+      <li><strong>A concrete model name</strong> (e.g. <code>gpt-strong</code>, <code>devin/claude-opus-4.8</code>) is a <strong>hard bypass</strong> — no routing.</li>
+      <li><strong><code>dynamic-1</code></strong> — a named group you define with <code>levels: {low, medium, high}</code>; the task is classified and dispatched to the mapped member.</li>
+      <li><strong>Sticky by conversation id</strong> — a thread pins to its member and only ever <em>escalates</em>, never downgrades.</li>
+      <li><strong>Pre-request routing only</strong> — routsi never touches a response mid-stream; forwards are raw byte passthrough with model + auth rewrite.</li>
+    </ul>
+
+    <h2 id="config">models.yaml</h2>
+    <p>Config resolution: <code>-config</code> flag &gt; <code>./models.yaml</code> &gt; <code>~/.config/routsi/models.yaml</code>. API keys are referenced by <strong>env-var name</strong>, never by value.</p>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>listen: ":8080"          # overridable with -listen / -port
+default: gpt-cheap
+sticky_ttl: 10m
+
+tiers:                   # what "auto" routes over
+  cheap: gpt-cheap
+  strong: gpt-strong
+
+models:
+  - name: gpt-cheap
+    type: forward                         # raw byte passthrough
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY         # env-var NAME, not the value
+    upstream_model: deepseek-chat
+
+  - name: gpt-strong
+    type: forward
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+    upstream_model: gpt-5.2</pre></div>
+    <p>Model <code>type</code>s: <code>forward</code> (any OpenAI-compatible upstream), <code>devin|codex|copilot|claude</code> (local agent CLIs), <code>dynamic</code> (a virtual model with levels), <code>queue</code> (a pull-worker), <code>custom</code> (an in-process Go handler). Use <code>variants:</code> or <code>discover_models: true</code> to expand one entry into many.</p>
+
+    <h2 id="routing">Routing &amp; stickiness</h2>
+    <h3>Dynamic groups</h3>
+    <div class="code"><div class="top"><span>a virtual model with levels</span><button class="copy">copy</button></div><pre>- name: dynamic-1
+  type: dynamic
+  levels:
+    low: gpt-cheap
+    medium: openai/gpt-4o-mini
+    high: devin/claude-opus-4.8    # hard tasks → a real agent</pre></div>
+    <p>Ask for <code>dynamic-1</code> and routsi classifies the current turn and dispatches to the mapped member. Missing levels fall back to the nearest declared one.</p>
+    <h3>Sticky, escalate-only</h3>
+    <p>Conversation identity comes from (in order) the <code>X-Conversation-Id</code> header, a body <code>conversation_id</code> field, or a hash of the first user message. A pinned thread only ever moves <em>up</em> a tier — it never silently downgrades mid-conversation. Fingerprint ids (<code>fp-</code> prefix) are used for stickiness only, never to trigger proxy-managed memory.</p>
+
+    <h2 id="agents">Agents as models</h2>
+    <p>Agent CLIs are first-class models. Name one directly, or route to one via a dynamic group's <code>high:</code>.</p>
+    <div class="code"><div class="top"><span>an agent, conversation-mapped</span><button class="copy">copy</button></div><pre>curl localhost:8080/v1/chat/completions \
+  -H 'X-Conversation-Id: refactor-1' \
+  -d '{"model":"devin/claude-opus-4.8",
+       "messages":[{"role":"user","content":"draft a refactor plan"}]}'
+# next turn, same header → the agent RESUMES its real session, keeps context</pre></div>
+    <p>Configure where the CLI lives and pass extra flags — no source build needed:</p>
+    <div class="code"><div class="top"><span>configurable agent binary + args</span><button class="copy">copy</button></div><pre>- name: devin
+  type: devin
+  provider: cognition
+  bin: /opt/homebrew/bin/devin     # optional — defaults to "devin" on PATH
+  args: ["--org", "acme"]          # optional — extra CLI flags
+  variants: [sonnet, opus]         # → devin --model &lt;variant&gt;
+  permission_mode: auto</pre></div>
+    <p>Same pattern for <code>codex</code>, <code>copilot</code>, <code>claude</code>. Their model lists come from <code>~/.config/routsi/known-models.json</code> (editable); Devin's is discovered live from the CLI.</p>
+
+    <h2 id="workers">Pull-workers</h2>
+    <p>Instead of routsi hosting an agent, a <strong>remote worker</strong> registers a named queue and answers requests routed to it. The worker is outbound-only — credentials never leave its machine.</p>
+    <div class="code"><div class="top"><span>on any machine with an agent logged in</span><button class="copy">copy</button></div><pre>routsi worker run --proxy https://your-proxy:8080 --queue my-agent \
+  --agent 'codex exec --skip-git-repo-check -'   # reads the question on stdin
+
+# now {"model":"my-agent"} routes to that worker; shows in /v1/models,
+# /v1/workers (live status), and the dashboard. No worker live? → fast 503.
+
+routsi install --skills    # install the worker as an agent skill (~/.claude, ~/.codex)</pre></div>
+    <div class="callout">A queue is a normal routable model. One worker per queue in v1; delivery is at-most-once; no worker auth yet (reserved <code>workers.auth</code> placeholder).</div>
+
+    <h2 id="auth">Auth &amp; mTLS</h2>
+    <p>Generate tokens or a full certificate trust chain with the CLI, then flip it on in config.</p>
+    <div class="code"><div class="top"><span>generate</span><button class="copy">copy</button></div><pre>routsi token -n 2      # prints rtk_… bearer tokens + setup notes
+routsi certs           # → ~/.config/routsi/certs/ (CA + server + client, keys 0600)</pre></div>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>auth:
+  tokens_env: ROUTSI_TOKENS    # export ROUTSI_TOKENS="tok1,tok2"
+tls:
+  cert: server.crt             # cert + key ⇒ HTTPS
+  key: server.key
+  client_ca: clients-ca.crt    # + client_ca ⇒ mutual TLS (client certs required)</pre></div>
+    <p>With tokens on, <code>/v1/*</code>, <code>/stats</code> and <code>/metrics</code> require <code>Authorization: Bearer &lt;tok&gt;</code> (OpenAI SDKs send it as the api_key); the dashboard opens at <code>/?token=…</code>. <code>/health</code> stays open. Token values live in env vars — never in the config file.</p>
+
+    <h2 id="dashboard">Dashboard &amp; metrics</h2>
+    <ul>
+      <li><strong><code>/</code></strong> — a self-contained live dashboard (requests, tokens, latency, routing split, escalations, worker status), auto-refreshing, theme-aware.</li>
+      <li><strong><code>/stats</code></strong> — a JSON snapshot.</li>
+      <li><strong><code>/metrics</code></strong> — Prometheus text to scrape.</li>
+    </ul>
+
+    <h2 id="service">Run as a service</h2>
+    <p>Keep routsi up across crashes and logins — launchd on macOS, systemd-user on Linux. No root; everything lives under your home dir.</p>
+    <div class="code"><div class="top"><span>watchdog</span><button class="copy">copy</button></div><pre>routsi install      # install + start (restart-on-failure, start-at-login)
+routsi status       # is it running?
+routsi uninstall    # stop + remove</pre></div>
+
+    <h2 id="api">HTTP API</h2>
+    <ul>
+      <li><code>POST /v1/chat/completions</code> — OpenAI-compatible, streaming (SSE) included.</li>
+      <li><code>GET /v1/models</code> — the full catalog (models, agent variants, queues), with <code>owned_by</code> providers.</li>
+      <li><code>POST /v1/workers/register</code> · <code>GET /v1/workers/{name}/jobs?wait=</code> · <code>POST /v1/workers/{name}/jobs/{id}</code> · <code>GET /v1/workers</code> — the pull-worker surface.</li>
+      <li><code>GET /health</code> — always open.</li>
+    </ul>
+    <div class="callout">OpenAI compatibility is the contract: request, response and streaming shapes match the OpenAI API so any OpenAI SDK works unmodified.</div>
+
+    <p style="margin-top:44px"><a class="btn btn-ghost" href="index.html">← Back to overview</a></p>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>routsi</div>
+    <div><a href="index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div>
+  </div>
+</footer>
+
+<script>
+const root=document.documentElement,tb=document.getElementById('theme');
+const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;
+tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t);};
+document.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{const pre=b.closest('.code').querySelector('pre');navigator.clipboard.writeText(pre.innerText).then(()=>{const o=b.textContent;b.textContent='copied ✓';setTimeout(()=>b.textContent=o,1400);});});
+// scroll-spy sidebar
+const links=[...document.querySelectorAll('.sidebar a')];
+const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const so=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active');}}),{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.doc-main h2[id]').forEach(h=>so.observe(h));
+</script>
+</body>
+</html>
