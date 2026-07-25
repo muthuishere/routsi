@@ -38,6 +38,12 @@ Provider **kinds** (all behind `Backend`; transport differs — keep it explicit
 A **router is just a provider** that selects among other providers — that is the
 "dynamic router as a worker" idea, already present as `type: dynamic`.
 
+**Additive, not a replacement.** `pull-worker` is a *new* kind added alongside the
+existing ones. `local-agent` (in-proxy devin/codex/copilot/claude invocation) **stays
+fully supported** — an operator may run an agent locally on the proxy OR plug it in as a
+remote worker, their choice per deployment. Nothing that works today is removed. (Owner
+decision, 2026-07-25.)
+
 ## Alternatives considered
 
 1. **Status quo (config-only, per-kind switch).** Works today; can't add providers at
