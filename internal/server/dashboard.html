@@ -56,6 +56,19 @@
   footer{color:var(--mut);font-size:12px;text-align:center;padding:20px;font-family:'JetBrains Mono',monospace}
   .empty{color:var(--mut);text-align:center;padding:40px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
   .wdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .section-title{font-size:14px;color:var(--mut);margin:8px 4px;font-family:'Inter',sans-serif}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:20px}
+  .kvgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px}
+  .kvgrid .k{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:500}
+  .kvgrid .v{font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:3px;word-break:break-word}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-family:'Inter',sans-serif;border:1px solid var(--line)}
+  .pill.on{color:var(--ok);border-color:var(--ok)}
+  .pill.off{color:var(--mut)}
+  .pill.warn{color:var(--warn);border-color:var(--warn)}
+  .subhead{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 6px}
+  .chiplist{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:12px;font-family:'JetBrains Mono',monospace}
+  .chip b{font-family:'Inter',sans-serif;font-weight:600;margin-right:5px}
 </style>
 </head>
 <body>
@@ -65,9 +78,11 @@
   <span class="sub" id="uptime">—</span>
 </header>
 <div class="wrap">
+  <div id="configwrap"></div>
   <div class="cards" id="cards"></div>
   <div id="workerswrap"></div>
   <div id="tablewrap"></div>
+  <div id="auditwrap"></div>
 </div>
 <footer>auto-refreshing every 3s · <span id="ts"></span></footer>
 <script>
@@ -117,6 +132,67 @@ async function tick(){
     `<table><thead><tr><th>Model</th><th>Requests</th><th>Escalations</th><th>Tokens</th><th>Avg</th><th>Max</th><th>Errors</th></tr></thead><tbody>${rows}</tbody></table>`;
 
   tickWorkers();
+  tickAudit();
+}
+
+async function tickConfig(){
+  const opts = TOKEN ? {headers:{Authorization:'Bearer '+TOKEN}} : {};
+  let d; try{ const r = await fetch('/config', opts); if(!r.ok) return; d = await r.json(); }catch(e){ return; }
+  const rows = [
+    ['Listen', d.listen], ['Default model', d.default],
+    ['Auth', `<span class="pill ${d.auth?'on':'off'}">${d.auth?'on':'off'}</span>`],
+    ['TLS', `<span class="pill ${d.tls==='off'?'off':(d.tls==='mtls'?'warn':'on')}">${esc(d.tls)}</span>`],
+    ['Decider', esc(d.decider)],
+  ];
+  const kv = rows.map(r=>`<div><div class="k">${r[0]}</div><div class="v">${r[1]}</div></div>`).join('');
+
+  const tierChips = Object.entries(d.tiers||{}).map(([lvl,m])=>
+    `<div class="chip"><b>${esc(lvl)}</b>${esc(m)}</div>`).join('') || '<span class="prov">none configured</span>';
+
+  const groupChips = Object.entries(d.dynamic_groups||{}).map(([name,levels])=>
+    `<div class="chip"><b>${esc(name)}</b>${Object.entries(levels).map(([l,m])=>`${esc(l)}=${esc(m)}`).join(', ')}</div>`
+  ).join('') || '<span class="prov">none configured</span>';
+
+  const modelRows = (d.models||[]).map(m=>
+    `<tr><td>${esc(m.name)}</td><td>${esc(m.type)}</td><td class="prov">${esc(m.provider||'')}</td></tr>`).join('');
+  const modelTable = (d.models||[]).length
+    ? `<table><thead><tr><th style="text-align:left">Model</th><th style="text-align:left">Type</th><th style="text-align:left">Provider</th></tr></thead><tbody>${modelRows}</tbody></table>`
+    : '<span class="prov">no models configured</span>';
+
+  document.getElementById('configwrap').innerHTML = `
+    <div class="section-title">Configuration</div>
+    <div class="panel">
+      <div class="kvgrid">${kv}</div>
+      <div class="subhead">Tiers</div>
+      <div class="chiplist">${tierChips}</div>
+      <div class="subhead">Dynamic groups</div>
+      <div class="chiplist">${groupChips}</div>
+      <div class="subhead">Model catalog</div>
+      ${modelTable}
+    </div>`;
+}
+
+async function tickAudit(){
+  const opts = TOKEN ? {headers:{Authorization:'Bearer '+TOKEN}} : {};
+  let d; try{ const r = await fetch('/audit?limit=25', opts); if(!r.ok){ document.getElementById('auditwrap').innerHTML=''; return; } d = await r.json(); }catch(e){ return; }
+  const rows = (d.decisions||[]);
+  if(!rows.length){ document.getElementById('auditwrap').innerHTML=''; return; }
+  const trs = rows.map(x=>{
+    const time = x.time ? x.time.split('T')[1]?.replace('Z','') || x.time : '';
+    const tok = x.tokens ? x.tokens.total : 0;
+    return `<tr>
+      <td class="prov">${esc(time)}</td>
+      <td>${esc(x.requested_model)} <span class="prov">&rarr;</span> <b>${esc(x.selected_model)}</b></td>
+      <td>${x.level?`<span class="tag">${esc(x.level)}</span>`:'—'}</td>
+      <td class="prov">${esc(x.source)}</td>
+      <td class="${x.status>=400||!x.status?'err':''}">${x.status||'—'}</td>
+      <td>${x.latency_ms}<small style="color:var(--mut)">ms</small></td>
+      <td>${tok?fmt(tok):'—'}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('auditwrap').innerHTML = `
+    <div class="section-title">Recent decisions</div>
+    <table><thead><tr><th style="text-align:left">Time</th><th style="text-align:left">Requested &rarr; Selected</th><th>Level</th><th style="text-align:left">Source</th><th>Status</th><th>Latency</th><th>Tokens</th></tr></thead><tbody>${trs}</tbody></table>`;
 }
 
 const STATE_COLOR = {online:'var(--ok)', busy:'var(--warn)', stale:'var(--mut)', reserved:'var(--line)'};
@@ -145,6 +221,7 @@ function showAuth(){
     '<div class="empty">401 — this server requires a token. Open <code>/?token=YOUR_TOKEN</code>.</div>';
 }
 tick(); setInterval(tick, 3000);
+tickConfig(); setInterval(tickConfig, 15000);
 </script>
 </body>
 </html>

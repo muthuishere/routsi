@@ -14,11 +14,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/muthuishere/routsi/internal/api"
+	"github.com/muthuishere/routsi/internal/audit"
 	"github.com/muthuishere/routsi/internal/backend"
 	"github.com/muthuishere/routsi/internal/config"
 	"github.com/muthuishere/routsi/internal/metrics"
@@ -44,6 +46,7 @@ type Server struct {
 	sticky   *sticky.Store
 	targets  map[string]*target
 	metrics  *metrics.Collector
+	audit    *audit.Ring
 	tokens   []string // bearer tokens; empty = auth off
 	broker   *queue.Broker
 
@@ -65,6 +68,7 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 		sticky:   sticky.New(cfg.StickyTTL),
 		targets:  map[string]*target{},
 		metrics:  metrics.New(),
+		audit:    audit.New(),
 		tokens:   cfg.Auth.AuthTokens(),
 		broker:   queue.NewWithConfig(cfg.Workers.Freshness, cfg.Workers.MaxWait),
 		dynamic:  map[string]*target{},
@@ -137,6 +141,23 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(s.metrics.Snapshot())
 	}))
+	mux.HandleFunc("GET /audit", s.guard(func(w http.ResponseWriter, r *http.Request) {
+		limit := 100
+		if q := r.URL.Query().Get("limit"); q != "" {
+			if n, err := strconv.Atoi(q); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		if limit > 200 {
+			limit = 200
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"decisions": s.audit.Recent(limit)})
+	}))
+	mux.HandleFunc("GET /config", s.guard(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(s.configSnapshot())
+	}))
 	// Worker (pull-worker) endpoints — no worker auth in v1 (ADR-001); the
 	// status list rides the same guard as /stats.
 	mux.HandleFunc("POST /v1/workers/register", s.workerRegister)
@@ -180,6 +201,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("X-Selected-Model", t.model.Name)
+	source := s.decisionSource(dec)
 
 	start := time.Now()
 	ev := metrics.Event{Model: t.model.Name, Provider: t.model.Provider, Routed: dec.routed, Escalated: dec.escalated}
@@ -188,13 +210,16 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	// sends only the new message; toolnexus's store carries the transcript.
 	if t.forward != nil && !explicitConversation(convID) {
 		status, err := t.forward.Relay(w, r, &req)
-		ev.LatencyMs, ev.Err = time.Since(start).Milliseconds(), err != nil
+		latency := time.Since(start).Milliseconds()
+		ev.LatencyMs, ev.Err = latency, err != nil
 		s.metrics.Record(ev) // token counts unknown on raw passthrough
+		s.recordAudit(req.Model, t.model.Name, dec.level, source, status, latency, nil, convID)
 		logReq(req.Model, t.model.Name, convID, status, start, err)
 		return
 	}
 	usage, err := s.envelope(w, r, t, &req)
-	ev.LatencyMs = time.Since(start).Milliseconds()
+	latency := time.Since(start).Milliseconds()
+	ev.LatencyMs = latency
 	if usage != nil {
 		ev.PromptTokens, ev.CompletionTokens = usage.PromptTokens, usage.CompletionTokens
 	}
@@ -204,7 +229,29 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		status = 0
 	}
+	s.recordAudit(req.Model, t.model.Name, dec.level, source, status, latency, usage, convID)
 	logReq(req.Model, t.model.Name, convID, status, start, err)
+}
+
+// recordAudit appends one decision to the audit ring. Never blocks or fails
+// the request — the ring is an in-memory, mutex-guarded, fixed-size buffer.
+// Only metadata and token counts are stored; message/prompt content and
+// secrets never reach this path.
+func (s *Server) recordAudit(requested, selected, level, source string, status int, latencyMs int64, usage *api.Usage, convID string) {
+	d := audit.Decision{
+		Time:           time.Now().UTC().Format(time.RFC3339),
+		RequestedModel: requested,
+		SelectedModel:  selected,
+		Level:          level,
+		Source:         source,
+		Status:         status,
+		LatencyMs:      latencyMs,
+		ConversationID: convID,
+	}
+	if usage != nil {
+		d.Tokens = audit.Tokens{Prompt: usage.PromptTokens, Completion: usage.CompletionTokens, Total: usage.TotalTokens}
+	}
+	s.audit.Record(d)
 }
 
 // resolve picks the target. Concrete model name = bypass, no routing. "auto"
@@ -213,8 +260,11 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 // conversation, escalate-only (never downgrade mid-conversation).
 // decision records how a target was chosen, for metrics.
 type decision struct {
-	routed    bool // auto/dynamic chose it (vs a bypass to a concrete name)
-	escalated bool // this turn escalated a pinned conversation upward
+	routed    bool   // auto/dynamic chose it (vs a bypass to a concrete name)
+	escalated bool   // this turn escalated a pinned conversation upward
+	group     string // "auto" or the dynamic model's name; empty on bypass
+	pinReused bool   // an existing sticky pin was reused unchanged this turn
+	level     string // the level the resolved model corresponds to; "" on bypass
 }
 
 func (s *Server) resolve(req *api.ChatRequest, convID string) (*target, decision) {
@@ -256,12 +306,32 @@ func (s *Server) resolveGroup(group string, levels map[string]string, req *api.C
 	if ok && s.targets[pinned] != nil {
 		if router.Rank(level) > router.Rank(levelOf(levels, pinned)) {
 			s.sticky.Pin(key, picked) // escalate and re-pin
-			return s.targets[picked], decision{routed: true, escalated: true}
+			return s.targets[picked], decision{routed: true, escalated: true, group: group, level: levelOf(levels, picked)}
 		}
-		return s.targets[pinned], decision{routed: true}
+		return s.targets[pinned], decision{routed: true, group: group, pinReused: true, level: levelOf(levels, pinned)}
 	}
 	s.sticky.Pin(key, picked)
-	return s.targets[picked], decision{routed: true}
+	return s.targets[picked], decision{routed: true, group: group, level: levelOf(levels, picked)}
+}
+
+// decisionSource classifies HOW a target was chosen, for the audit trail.
+// Best-effort: it derives from what the handler already knows (routed vs
+// bypass, a reused pin, and whether an external decider is configured), not
+// from any deeper plumbing into router.External.
+func (s *Server) decisionSource(dec decision) string {
+	if !dec.routed {
+		return "bypass"
+	}
+	if dec.pinReused {
+		return "sticky-pin"
+	}
+	if dec.group == RouterModel {
+		if _, ok := s.router.(*router.External); ok {
+			return "auto-external"
+		}
+		return "auto-rules"
+	}
+	return "dynamic"
 }
 
 // backendStatus maps a backend error to an HTTP status. A queue with no live
