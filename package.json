@@ -1,0 +1,36 @@
+{
+  "name": "routsi",
+  "version": "0.1.0",
+  "description": "OpenAI-compatible dynamic LLM router — a single Go binary, installed via npm as a prebuilt native binary",
+  "license": "MIT",
+  "bin": {
+    "routsi": "npm/launcher.js"
+  },
+  "files": [
+    "npm",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muthuishere/routsi.git"
+  },
+  "homepage": "https://muthuishere.github.io/routsi",
+  "bugs": {
+    "url": "https://github.com/muthuishere/routsi/issues"
+  },
+  "keywords": [
+    "llm",
+    "router",
+    "openai",
+    "proxy",
+    "ai"
+  ]
+}

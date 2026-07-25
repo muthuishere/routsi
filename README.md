@@ -14,6 +14,17 @@ cp models.yaml ~/.config/routsi/ # or keep ./models.yaml
 routsi serve                     # listens on :8080 by default
 ```
 
+### Install via npm
+
+```sh
+npm install -g routsi
+```
+
+`postinstall` downloads the prebuilt `routsi` binary for your OS/arch from [GitHub
+Releases](https://github.com/muthuishere/routsi/releases) — no Go toolchain needed.
+See [`docs/adr/006-npm-distribution.md`](docs/adr/006-npm-distribution.md) for how it
+works.
+
 Point any OpenAI client at `http://localhost:8080/v1`. Then:
 
 ```sh
@@ -69,6 +80,12 @@ tls:
 With tokens on: `/v1/*`, `/stats`, `/metrics` need `Authorization: Bearer <tok>`
 (OpenAI SDKs send this automatically as the api_key); dashboard: `/?token=tok`.
 `/health` stays open. Token values live in env vars, never in the config file.
+
+**Secrets via `.env`:** on startup routsi layers env vars, highest priority first:
+process env > `-env`/`ROUTSI_ENV_FILE` > `./.env` > `~/.config/routsi/.env`. A file
+never overrides a higher source and values are never logged — so provider keys and
+`ROUTSI_TOKENS` can live in whichever `.env` suits you instead of your shell profile.
+Keep the file `chmod 600` and out of version control.
 
 The chosen model is returned in the `X-Selected-Model` header. Every response
 carries a `usage` block.

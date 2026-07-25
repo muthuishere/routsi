@@ -1,0 +1,129 @@
+name: release
+
+# Builds per-platform routsi binaries, publishes them as GitHub Release assets,
+# and (if NPM_TOKEN is configured) publishes the npm package that downloads them.
+#
+# Asset naming scheme — MUST match scripts/postinstall.js's assetName():
+#   routsi_<os>_<arch>.tar.gz   for darwin/linux   (os in {darwin, linux})
+#   routsi_windows_<arch>.zip   for windows
+#   arch in {amd64, arm64}
+# The archive is flat: it contains only the binary, named "routsi" (or
+# "routsi.exe" for windows) — no top-level directory.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          OUT="routsi"
+          if [ "$GOOS" = "windows" ]; then OUT="routsi.exe"; fi
+          go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/${OUT}" ./cmd/routsi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "OUT=${OUT}" >> "$GITHUB_ENV"
+
+      - name: Package archive
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          ASSET="routsi_${{ matrix.goos }}_${{ matrix.goarch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "${ASSET}.zip" "${OUT}"
+            echo "ASSET_FILE=${ASSET}.zip" >> "$GITHUB_ENV"
+          else
+            tar -czf "${ASSET}.tar.gz" "${OUT}"
+            echo "ASSET_FILE=${ASSET}.tar.gz" >> "$GITHUB_ENV"
+          fi
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/${{ env.ASSET_FILE }}
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-assets-*
+          merge-multiple: true
+
+      - name: Generate checksums.txt
+        working-directory: dist
+        run: sha256sum * > checksums.txt
+
+      - name: Create GitHub Release + upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  publish-npm:
+    name: publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Set package version from tag
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version --no-git-tag-version --allow-same-version "${VERSION}"
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "::warning::NPM_TOKEN secret not set — skipping npm publish. Add it in repo Settings > Secrets to enable publishing."
+            exit 0
+          fi
+          npm publish --access public
