@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who it's for — routsi docs</title>
+<meta name="description" content="What each kind of user should expect from routsi: app builders, coding-agent teams, self-hosters, BYO-agent setups, and anyone translating Anthropic/Gemini upstreams.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<div class="bg"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="../index.html"><span class="dot"></span>routsi</a>
+    <div class="nav-links">
+      <a href="../index.html#compare">Compare</a>
+      <a href="../index.html#who">Who it's for</a>
+      <a href="index.html">Docs</a>
+      <button class="themebtn" id="theme" aria-label="Toggle theme">◑</button>
+      <a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<div class="docshell">
+  <aside class="sidebar">
+    <div class="grp">
+      <h4>Start here</h4>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install</a>
+      <a href="quickstart.html">Quick start</a>
+      <a href="concepts.html">Core concepts</a>
+      <a href="who-its-for.html" class="active">Who it's for</a>
+    </div>
+    <div class="grp">
+      <h4>Configure</h4>
+      <a href="configuration.html">models.yaml</a>
+      <a href="routing.html">Routing &amp; stickiness</a>
+      <a href="auto-routing.html">How auto decides</a>
+      <a href="agents.html">Agents as models</a>
+      <a href="workers.html">Pull-workers</a>
+    </div>
+    <div class="grp">
+      <h4>Operate</h4>
+      <a href="auth.html">Auth &amp; mTLS</a>
+      <a href="dashboard.html">Dashboard &amp; metrics</a>
+      <a href="api.html">HTTP API</a>
+    </div>
+    <div class="grp">
+      <h4>Recipes</h4>
+      <a href="scenarios/index.html">Scenarios</a>
+      <div class="sub">
+        <a href="scenarios/auto-routing.html">Auto routing</a>
+        <a href="scenarios/concrete-bypass.html">Concrete bypass</a>
+        <a href="scenarios/token-auth.html">Token auth</a>
+        <a href="scenarios/mtls.html">mTLS</a>
+        <a href="scenarios/agent-session.html">Agent session</a>
+        <a href="scenarios/pull-worker.html">Pull-worker</a>
+        <a href="scenarios/streaming-heartbeat.html">Streaming + heartbeat</a>
+        <a href="scenarios/dynamic-group.html">Dynamic group</a>
+        <a href="scenarios/env-secrets.html">.env secrets</a>
+      </div>
+    </div>
+  </aside>
+
+  <main class="doc-main">
+    <h1>Who it's for — what to expect</h1>
+    <p class="lede">routsi means different things depending on what you're plugging into it. Five concrete profiles, each with the exact behavior you get and the setup that gets you there — every claim below is live-verified against real upstreams, not just unit-tested.</p>
+
+    <h2 id="app-builders">1 · App builders on the OpenAI SDK</h2>
+    <p><strong>What to expect:</strong> point your existing OpenAI SDK's base URL at routsi, send <code>model: "auto"</code>, change nothing else. Easy questions get classified LOW and go to a cheap model; hard ones get classified HIGH and escalate to a stronger model or a full agent. A conversation pins to whatever level it first escalates to and never downgrades mid-thread — so a thread that got smart once stays smart.</p>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>tiers:
+  cheap: gpt-cheap
+  strong: gpt-strong</pre></div>
+    <p>That's the whole setup. See <a class="link" href="auto-routing.html">How <code>auto</code> decides</a> for the exact classification rules and <a class="link" href="scenarios/auto-routing.html">the auto-routing scenario</a> for a copy-paste curl.</p>
+
+    <h2 id="agent-teams">2 · Teams running coding agents</h2>
+    <p><strong>What to expect:</strong> Devin, Codex, Copilot, and Claude Code each become an addressable <code>model</code> over the same <code>/v1/chat/completions</code> endpoint — no separate integration per agent. Send a <code>X-Conversation-Id</code> and routsi owns the memory: Devin gets a <em>real resumed session</em> (first turn runs <code>devin -p</code> and captures the session id, every later turn in that conversation runs <code>devin -r &lt;session&gt; -p</code> — live-verified: turn 2 recalled turn 1's content with no history resent). Codex/Copilot/Claude Code don't have a native session concept yet, so routsi renders the transcript into the prompt each call instead — same client-side contract, slightly different mechanics under the hood.</p>
+    <p><strong>Streaming caveat:</strong> these CLIs only print a final answer, so routsi fakes SSE off the completed result — you get one delta chunk with the whole text, not token-by-token. Don't expect incremental UI unless the answerer is an API model.</p>
+    <div class="code"><div class="top"><span>models.yaml</span><button class="copy">copy</button></div><pre>- name: devin
+  type: devin
+  provider: cognition
+  variants: [sonnet, opus]
+
+- name: codex
+  type: codex
+  provider: openai
+
+- name: claude
+  type: claude
+  provider: anthropic</pre></div>
+    <p>Full config shape (custom <code>bin:</code>/<code>args:</code>/<code>permission_mode:</code>) in <a class="link" href="agents.html">Agents as models</a>; the session-resume mechanics in <a class="link" href="scenarios/agent-session.html">the agent-session scenario</a>.</p>
+
+    <h2 id="self-hosters">3 · Self-hosters &amp; privacy-minded</h2>
+    <p><strong>What to expect:</strong> one Go binary you run yourself — <code>routsi install</code> sets up a keep-alive service (launchd on macOS, systemd --user on Linux) with restart-on-failure, no root required. Provider keys live in your process env or a local <code>.env</code>, referenced by name in config, never logged or printed. Nothing calls home; there's no SaaS hop between your client and the upstream provider. Bearer-token auth and mutual TLS are both opt-in config blocks, off by default.</p>
+    <div class="code"><div class="top"><span>enable auth</span><button class="copy">copy</button></div><pre>auth:
+  tokens_env: ROUTSI_TOKENS   # export ROUTSI_TOKENS="tok1,tok2"</pre></div>
+    <p>See <a class="link" href="auth.html">Auth &amp; mTLS</a> and <a class="link" href="scenarios/env-secrets.html">.env secrets</a> for the full setup.</p>
+
+    <h2 id="byo-agent">4 · Distributed / BYO-agent setups</h2>
+    <p><strong>What to expect:</strong> a teammate runs <code>routsi worker run --queue my-codex --agent 'codex exec -'</code> on their own machine. That registers a named queue that becomes a normal routable model (<code>model: "my-codex"</code>) — the worker polls outbound over plain HTTP, so it works behind NAT with no inbound port to open, and their credentials never leave their box. One worker per queue, non-streaming, at-most-once delivery in v1; a request fast-503s if no worker has polled recently instead of hanging forever.</p>
+    <div class="code"><div class="top"><span>on the worker's machine</span><button class="copy">copy</button></div><pre>routsi worker run --queue my-codex --agent 'codex exec -'</pre></div>
+    <p>There's also an agent-driven mode (<code>routsi worker register|poll|answer</code>) for a live Claude Code/Codex session to answer with its own reasoning instead of shelling to a subprocess — see <a class="link" href="workers.html">Pull-workers</a> and <a class="link" href="scenarios/pull-worker.html">the pull-worker scenario</a>.</p>
+
+    <h2 id="translated-upstreams">5 · Mixing in native Anthropic/Gemini APIs</h2>
+    <p><strong>What to expect:</strong> a <code>forward</code> model with <code>style: anthropic</code> or <code>style: gemini</code> gets wire-translated through the toolnexus client instead of raw byte passthrough. You get the same conversation contract as the CLI agents — pass <code>X-Conversation-Id</code> and routsi manages the transcript for you (toolnexus's own conversation store, live-verified: a second turn recalled a fact from the first with no history resent); omit it and the client resends full history as usual. Streaming is faked off the completed response here too, same caveat as agents.</p>
+    <div class="code"><div class="top"><span>models.yaml — anthropic</span><button class="copy">copy</button></div><pre>- name: claude
+  type: forward
+  style: anthropic
+  base_url: https://api.anthropic.com
+  api_key_env: ANTHROPIC_API_KEY
+  upstream_model: claude-sonnet-5</pre></div>
+    <p><strong>One real gotcha:</strong> <code>style: gemini</code> doesn't speak Gemini's native REST format — the underlying toolnexus client only implements <code>openai</code> and <code>anthropic</code> wire shapes, so anything else silently falls through to an OpenAI-shaped request. That works fine, but only if <code>base_url</code> points at Google's <strong>OpenAI-compatibility</strong> endpoint, not the native API root:</p>
+    <div class="code"><div class="top"><span>models.yaml — gemini (the base_url that actually works)</span><button class="copy">copy</button></div><pre>- name: gemini-flash
+  type: forward
+  style: gemini
+  base_url: https://generativelanguage.googleapis.com/v1beta/openai
+  api_key_env: GEMINI_API_KEY
+  upstream_model: gemini-2.5-flash</pre></div>
+    <p>Pointing <code>base_url</code> at bare <code>https://generativelanguage.googleapis.com</code> (the native root) will 404 on every request — routsi still sends a well-formed OpenAI-style call, Gemini's native API just doesn't answer at that path.</p>
+
+    <p style="margin-top:44px"><a class="btn btn-ghost" href="configuration.html">Next: models.yaml →</a></p>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>routsi</div>
+    <div><a href="../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div>
+  </div>
+</footer>
+
+<script>
+const root=document.documentElement,tb=document.getElementById('theme');
+const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;
+tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t);};
+document.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{const pre=b.closest('.code').querySelector('pre');navigator.clipboard.writeText(pre.innerText).then(()=>{const o=b.textContent;b.textContent='copied ✓';setTimeout(()=>b.textContent=o,1400);});});
+// scroll-spy: highlight in-page anchors only (cross-page sidebar links are untouched)
+const links=[...document.querySelectorAll('.sidebar a[href^="#"]')];
+const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const so=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active');}}),{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.doc-main h2[id]').forEach(h=>so.observe(h));
+</script>
+</body>
+</html>
