@@ -222,6 +222,21 @@ project root, avoid symlinked cwds; session db at
 auth.json separate). Next: promote the driver into `routsi worker` / the
 routsi-worker skill (ADR-005 extension).
 
+## 2026-07-30 — ADR-011 Phase A shipped + opencode/decider docs
+
+One-shot CLI agents (devin/codex/claude/copilot) now emit tool_calls: shared
+fenced-JSON emulation in `internal/backend/toolemu.go` (`buildToolPrompt` +
+`parseToolReply`, parse-failure ⇒ plain text, never a fabricated call);
+`CompleteResult` on CLIAgent + Devin (both now `backend.ResultBackend`);
+`renderTranscript` renders tool_calls/tool-result turns. Table tests in
+toolemu_test.go; live-verified through the proxy (claude-oneshot: tool_call out,
+tool-result round trip back to text). Deviation from ADR-011 as written: fenced
+JSON for ALL four agents (no per-agent --json-schema plumbing yet; the
+schema-constrained variant + `tools: off|emulated` config knob + X-Tool-Mode
+header remain open). New docs: docs/opencode.md (opencode with one-shot vs
+interactive-worker flavors + agent-routing decider), examples/decider-agents.js
+(custom JS decider → dynamic group levels map to agents/queues; tested).
+
 ## Current state (2026-07-23)
 
 Phase 1 built and tested: routing (`auto` + rules), bypass, stickiness with

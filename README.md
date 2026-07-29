@@ -193,9 +193,16 @@ own workspace — devin never touched the client's files. The same pattern runs
 `claude-live` and `codex-live` queues side by side on one proxy. Why interactive
 beats one-shot CLI backends for this: no prompt-size ceiling (the job is handed over
 as a file — one-shot `devin -p` dies near ~80KB, smaller than opencode's system
-prompt), a warm session instead of a cold spawn per turn, and tool calls, which the
-one-shot backends don't emit today. Setup and the reference driver:
-`examples/interactive-worker/README.md`.
+prompt) and a warm session instead of a cold spawn per turn. Setup and the
+reference driver: `examples/interactive-worker/README.md`.
+
+The **one-shot agent backends** (`type: devin|codex|claude|copilot`) also speak
+tool calling now — a fenced-JSON emulation protocol renders the client's tool
+schemas into the prompt and parses the agent's decision back into wire-correct
+`tool_calls` (any parse failure degrades to plain text, never a fabricated call).
+So `{"model":"codex","tools":[...]}` just works. Guide for wiring **opencode** to
+either flavor — plus a custom JS decider that picks the agent per request:
+[`docs/opencode.md`](docs/opencode.md).
 
 ## Run it as a service (watchdog)
 

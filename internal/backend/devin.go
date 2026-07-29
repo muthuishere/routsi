@@ -87,6 +87,24 @@ func (d *Devin) newestSession(ctx context.Context) (string, error) {
 }
 
 func (d *Devin) Complete(ctx context.Context, req *api.ChatRequest) (string, error) {
+	return d.complete(ctx, req, func(p string) string { return p })
+}
+
+// CompleteResult adds tool-call emulation (ADR-011 Phase A) — same protocol
+// as CLIAgent; devin's session mapping is reused unchanged.
+func (d *Devin) CompleteResult(ctx context.Context, req *api.ChatRequest) (api.Result, error) {
+	if len(req.Tools) == 0 {
+		text, err := d.Complete(ctx, req)
+		return api.Result{Content: text}, err
+	}
+	text, err := d.complete(ctx, req, func(p string) string { return buildToolPrompt(p, req.Tools) })
+	if err != nil {
+		return api.Result{}, err
+	}
+	return parseToolReply(text), nil
+}
+
+func (d *Devin) complete(ctx context.Context, req *api.ChatRequest, wrap func(string) string) (string, error) {
 	convID := req.ConversationID
 	// Fingerprint ids exist for routing stickiness only. Two users opening
 	// with the same first message share a fingerprint — mapping it to a
@@ -100,7 +118,7 @@ func (d *Devin) Complete(ctx context.Context, req *api.ChatRequest) (string, err
 
 	prompt := req.LastUserText()
 	if sid != "" {
-		args := append(d.baseArgs(), "-r", sid, "-p", prompt)
+		args := append(d.baseArgs(), "-r", sid, "-p", wrap(prompt))
 		return d.run(ctx, args...)
 	}
 
@@ -109,7 +127,7 @@ func (d *Devin) Complete(ctx context.Context, req *api.ChatRequest) (string, err
 	if len(req.Messages) > 1 {
 		prompt = renderTranscript(req)
 	}
-	args := append(d.baseArgs(), "-p", prompt)
+	args := append(d.baseArgs(), "-p", wrap(prompt))
 
 	// Create-then-list must not interleave with another new conversation.
 	d.mu.Lock()
@@ -142,7 +160,14 @@ func renderTranscript(req *api.ChatRequest) string {
 		if i == len(req.Messages)-1 && m.Role == "user" {
 			break
 		}
-		fmt.Fprintf(&b, "%s: %s\n", m.Role, m.Text())
+		switch {
+		case m.Role == "tool":
+			fmt.Fprintf(&b, "tool result (%s): %s\n", m.ToolCallID, m.Text())
+		case len(m.ToolCalls) > 0:
+			fmt.Fprintf(&b, "%s tool_calls: %s\n", m.Role, string(m.ToolCalls))
+		default:
+			fmt.Fprintf(&b, "%s: %s\n", m.Role, m.Text())
+		}
 	}
 	fmt.Fprintf(&b, "\nAnswer the latest user message: %s", req.LastUserText())
 	return b.String()

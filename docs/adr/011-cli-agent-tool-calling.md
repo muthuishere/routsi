@@ -1,6 +1,6 @@
 # ADR-011: Tool calling for CLI agents (claude / codex / devin / copilot)
 
-- **Status:** Proposed
+- **Status:** Accepted — Phase A shipped 2026-07-30: fenced-JSON emulation in `internal/backend/toolemu.go`, `CompleteResult` on CLIAgent + Devin (live-verified: one-shot claude emitted get_weather tool_call and completed the result round trip through the proxy). Phase B (MCP trampoline) still open, gated on spike 003.
 - **Date:** 2026-07-29
 - **Deciders:** owner + routsi
 

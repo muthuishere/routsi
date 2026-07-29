@@ -66,6 +66,14 @@ keyword hints / length), heavily commented, as a real starting point to
 rewrite rather than a toy. Both are executable (`chmod +x` already applied,
 shebang present) if you'd rather point `command` straight at the file.
 
+## Routing between agents: `decider-agents.js`
+
+Same contract, different goal: pick WHICH AGENT serves a request. Pair it with a
+dynamic group whose levels map to agent models/queues (cheap one-shot claude for
+quick Q&A, codex for code edits, a `devin-live` interactive worker for multi-step
+builds) — see [docs/opencode.md](../docs/opencode.md) for the full setup with
+opencode as the client.
+
 ## Caveat
 
 v1 spawns a fresh process per `auto` request — fine for a Node/Python script,

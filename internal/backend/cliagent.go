@@ -51,11 +51,32 @@ func (a *CLIAgent) bin() string {
 }
 
 func (a *CLIAgent) Complete(ctx context.Context, req *api.ChatRequest) (string, error) {
-	prompt := req.LastUserText()
-	if len(req.Messages) > 1 {
-		prompt = renderTranscript(req)
-	}
+	return a.runPrompt(ctx, basePrompt(req))
+}
 
+// CompleteResult adds tool-call emulation (ADR-011 Phase A): with client
+// tools present, the prompt carries the manifest + fenced-JSON protocol and
+// the reply is parsed into text or tool calls (backend.ResultBackend).
+func (a *CLIAgent) CompleteResult(ctx context.Context, req *api.ChatRequest) (api.Result, error) {
+	if len(req.Tools) == 0 {
+		text, err := a.Complete(ctx, req)
+		return api.Result{Content: text}, err
+	}
+	text, err := a.runPrompt(ctx, buildToolPrompt(basePrompt(req), req.Tools))
+	if err != nil {
+		return api.Result{}, err
+	}
+	return parseToolReply(text), nil
+}
+
+func basePrompt(req *api.ChatRequest) string {
+	if len(req.Messages) > 1 {
+		return renderTranscript(req)
+	}
+	return req.LastUserText()
+}
+
+func (a *CLIAgent) runPrompt(ctx context.Context, prompt string) (string, error) {
 	var args []string
 	outFile := ""
 	switch a.model.Type {
