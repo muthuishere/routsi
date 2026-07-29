@@ -17,6 +17,7 @@ refactor is **parked** — not being built now.
 | [004](004-provider-status-health.md) | Provider status & health | Proposed | ➖ **minimal slice only** — worker liveness + failure visibility for the new queue path |
 | [002](002-unified-provider-model.md) | Unified provider model | **Parked** | ❌ architecture refactor — not now |
 | [003](003-control-plane-remote-cli.md) | Control plane & remote CLI | **Parked** | ❌ general admin API — not now |
+| [008](008-agent-tool-call-bridge.md) | Agent tool-call bridge | Proposed | ⏳ additive — surface agent-internal tool activity as an OpenAI trace (opencode compatibility) |
 
 Live work = **001 + 005 + a minimal 004** (worker status only). The pull-worker is added
 as a plain `Backend` + config `type`, plus one dynamic-register endpoint so a worker can
