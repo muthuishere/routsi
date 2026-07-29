@@ -82,6 +82,17 @@ routsi install --skills    # install the worker as an agent skill (~/.claude, ~/
 
     <p>Full walk-through, including a live request: <a class="link" href="scenarios/pull-worker.html">Scenarios → Pull-worker</a>.</p>
 
+    <h2 id="tools">Tool calling — a live agent as an OpenAI model</h2>
+    <p>The queue path speaks <strong>OpenAI function calling</strong>: a request's <code>tools</code> ride along in the job, and the worker may answer with tool calls instead of text. The <em>client</em> executes them and sends the results back as the next request — the worker only decides.</p>
+    <div class="code"><div class="top"><span>worker answers a job with a tool call</span><button class="copy">copy</button></div><pre>curl -s -X POST "$PROXY/v1/workers/my-agent/jobs/$JOB_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"tool_calls":[{"name":"write","arguments":{"filePath":"a.txt","content":"hi"}}]}'
+
+# → the client receives a wire-correct response:
+#   finish_reason:"tool_calls", string-encoded arguments, generated call ids</pre></div>
+    <p>This makes a <strong>long-lived interactive agent TUI</strong> (devin, Claude Code, codex) a first-class model for any OpenAI client. Live-proven: opencode built and refactored apps using devin / Claude Code / codex TUIs as its model — 7–14 tool-call rounds per task, three worker queues on one proxy. A job is handed to the TUI as a <em>file</em>, so there is no prompt-size ceiling (one-shot <code>devin -p</code> dies near ~80KB — smaller than opencode's system prompt), and the session stays warm.</p>
+    <div class="callout">Reference driver + setup: <a class="link" href="https://github.com/muthuishere/routsi/tree/main/examples/interactive-worker" target="_blank" rel="noopener">examples/interactive-worker</a>. Evidence: <a class="link" href="https://github.com/muthuishere/routsi/blob/main/docs/spikes/006-interactive-worker-opencode.md" target="_blank" rel="noopener">spike 006</a>. The <code>routsi install --skills</code> agent skill documents the answer contract for agent-driven workers.</div>
+
     <p style="margin-top:44px"><a class="btn btn-ghost" href="auth.html">Next: Auth &amp; mTLS →</a></p>
   </main>
 </div>
