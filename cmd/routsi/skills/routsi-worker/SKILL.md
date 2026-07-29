@@ -112,7 +112,12 @@ you — you only *decide* which to call; you never run them yourself.
   whole point is that the client executes on its side.
 
 For a long-lived interactive TUI (devin/claude/codex) serving a queue via file-handoff — no
-prompt-size limits, warm context — see `examples/interactive-worker/` in the routsi repo.
+prompt-size limits, warm context — use `routsi worker join --queue NAME --workdir DIR
+--notify '<command that tells the agent to read $ROUTSI_JOB_FILE>'`: it registers the
+queue, writes each job (conversation + tool schemas) to a job file, runs your notify
+command (re-running it every --nudge until the agent writes the answer file), and posts
+`answer-<id>.json` back — `{"content"}` or `{"tool_calls":[...]}` both work. Details:
+`examples/interactive-worker/` in the routsi repo.
 
 ### 4. Stopping
 

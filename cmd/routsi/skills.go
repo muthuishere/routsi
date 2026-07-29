@@ -96,8 +96,10 @@ func worker() {
 		workerPollCmd()
 	case "answer":
 		workerAnswerCmd()
+	case "join":
+		workerJoinCmd()
 	default:
-		fmt.Fprintf(os.Stderr, "usage: routsi worker <run|scaffold|register|poll|answer>\n")
+		fmt.Fprintf(os.Stderr, "usage: routsi worker <run|join|scaffold|register|poll|answer>\n")
 		os.Exit(2)
 	}
 }

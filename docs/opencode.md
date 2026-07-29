@@ -49,11 +49,17 @@ A long-lived agent TUI joins routsi as a pull-worker queue; jobs are handed over
 files (no size limit), the session stays warm, and tool calls flow natively:
 
 ```sh
-routsi worker register -queue devin-live         # queue = routable model
 devin --permission-mode dangerous                # the TUI, in a scratch dir
-node worker-driver.js <sendkeys> <spool> devin-live <workdir>   # the glue
+routsi worker join --queue devin-live --workdir ~/devin-jobs \
+  --notify 'tmux send-keys -t devin "Read $ROUTSI_JOB_FILE and follow its HOW TO ANSWER section." Enter'
 opencode --model routsi/devin-live
 ```
+
+`join` registers the queue, writes each job (conversation + tool schemas) to
+`job-<id>.md`, runs your `--notify` command (any keystroke automation — tmux,
+ghostty-sendkeys, even a headless `claude -p`), re-nudges every 45s until the
+agent writes `answer-<id>.json` (`{"content"}` or `{"tool_calls":[...]}`), and
+posts it back.
 
 Full setup + reference driver: [`examples/interactive-worker/`](../examples/interactive-worker/).
 Real sessions (opencode building/refactoring apps through devin, claude and codex

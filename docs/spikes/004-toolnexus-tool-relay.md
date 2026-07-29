@@ -22,6 +22,16 @@ the model's `tool_use` back to routsi **without executing anything proxy-side**?
   of invoking a handler — or whether a no-op handler + loop-depth-0 config can fake
   it.
 
+## Resolution (2026-07-30, source-verified)
+
+`Ask`'s agent loop **hard-executes** every `tool_use` block the model returns
+(client.go:1173 — "Execute all tool_use blocks in this turn concurrently") and
+loops until `stopReason != "tool_use"` (client.go:1763). There is no
+declaration-only/no-execute mode. **ADR-010 is blocked on upstream toolnexus
+work** (a relay mode that surfaces tool_use instead of executing) — file it in
+the toolnexus repo before accepting ADR-010. The experiment plan below stands
+for once that mode exists.
+
 ## Experiment plan
 
 1. Register a `Tool` whose handler returns a sentinel error / never runs; call

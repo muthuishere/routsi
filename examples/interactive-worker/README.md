@@ -44,14 +44,23 @@ any keystroke automation (tmux `send-keys`, expect) can replace those three line
 ```sh
 # 1. proxy side
 routsi serve                                    # any config
-routsi worker register -queue devin-live
 
 # 2. agent side: an interactive TUI in its own terminal, yolo mode, in a scratch dir
 devin --permission-mode dangerous               # or: claude --dangerously-skip-permissions / codex
 
-# 3. the glue
-node worker-driver.js <sendkeys.js> <spool-dir> devin-live <agent-workdir>
+# 3. the glue — built into the CLI (registers the queue itself):
+routsi worker join --proxy http://proxy:8080 --queue devin-live --workdir ~/devin-jobs \
+  --notify 'tmux send-keys -t devin "Read $ROUTSI_JOB_FILE and follow its HOW TO ANSWER section." Enter'
 ```
+
+`--notify` is any command that tells your agent about the job (it gets
+`ROUTSI_JOB_ID` / `ROUTSI_JOB_FILE` / `ROUTSI_ANSWER_FILE` in env, runs in
+`--workdir`, and is re-run every `--nudge` until the answer file appears). It
+even works fully headless — `--notify 'claude -p --dangerously-skip-permissions
+"Read $ROUTSI_JOB_FILE and follow its HOW TO ANSWER section."'` was live-verified
+returning tool_calls. `worker-driver.js` in this directory is the original
+ghostty-sendkeys prototype the subcommand was distilled from — keep it only if
+you need custom pacing logic.
 
 Then from any OpenAI client: `{"model":"devin-live", "tools":[...], ...}`.
 

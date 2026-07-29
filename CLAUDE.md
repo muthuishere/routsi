@@ -222,6 +222,22 @@ project root, avoid symlinked cwds; session db at
 auth.json separate). Next: promote the driver into `routsi worker` / the
 routsi-worker skill (ADR-005 extension).
 
+## 2026-07-30 (later) — `routsi worker join` shipped; ADR-010 blocked upstream
+
+`routsi worker join` (cmd/routsi/join.go, wired in skills.go dispatch) productizes the
+interactive-worker pattern: registers the queue, long-polls, writes each job (transcript
++ tool schemas, spike-006 format) to `job-<id>.md` in --workdir, runs a user --notify
+command (sh -c; env ROUTSI_JOB_ID/JOB_FILE/ANSWER_FILE; re-run every --nudge, default
+45s) until the agent writes `answer-<id>.json` ({"content"} or {"tool_calls"} — anything
+else wrapped as content), POSTs it back; --job-timeout 8m default. Live-verified with a
+HEADLESS notify (`claude -p --dangerously-skip-permissions "Read $ROUTSI_JOB_FILE…"`) —
+tool_calls response end-to-end, no TUI needed. Docs switched to join (example README,
+opencode.md, SKILL.md; worker-driver.js kept as prototype). Spike 004 resolved: toolnexus
+v0.10.0 `Ask` hard-executes tool_use (client.go:1173, :1763), no declaration-only mode ⇒
+**ADR-010 blocked on upstream toolnexus relay mode** — file issue there before accepting.
+Still open: ADR-009 (request fidelity), ADR-011 Phase B (MCP trampoline, spike 003),
+`tools: off|emulated` knob + X-Tool-Mode header, worker capabilities-at-register.
+
 ## 2026-07-30 — ADR-011 Phase A shipped + opencode/decider docs
 
 One-shot CLI agents (devin/codex/claude/copilot) now emit tool_calls: shared
