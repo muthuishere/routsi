@@ -159,6 +159,44 @@ mode as an alternative):
 routsi install --skills     # into ~/.claude/skills and ~/.codex/skills
 ```
 
+## Tool calling through workers — use a live agent as an OpenAI model
+
+The queue path speaks **OpenAI function calling**: a request's `tools` ride along in
+the job, and the worker may answer with `tool_calls` instead of text —
+`{"tool_calls":[{"name":"write","arguments":{...}}]}` posted to the answer endpoint
+becomes a wire-correct response (`finish_reason:"tool_calls"`, string-encoded
+arguments, generated call ids). The *client* executes the calls and sends the results
+back as the next request; the worker only decides.
+
+That makes a **long-lived interactive agent TUI** (devin, Claude Code, codex) a
+first-class model for any OpenAI client. Real session — opencode using devin through
+routsi (`examples/interactive-worker/`, evidence in `docs/spikes/006-*`):
+
+```
+you      ▶ opencode --model routsi/devin-live
+you      ▶ "Refactor into separate files and extend, step by step: split CSS/JS out
+            of index.html, add a dark-mode toggle with localStorage, README, verify."
+
+devin    ◀ tool_calls: todowrite              (plans in opencode's own todo tool)
+devin    ◀ tool_calls: todowrite, read        (reads index.html before touching it)
+devin    ◀ tool_calls: write                  (style.css)
+devin    ◀ tool_calls: todowrite, write       (app.js)
+devin    ◀ tool_calls: todowrite, edit, edit  (relinks index.html — 3 calls, one round)
+devin    ◀ tool_calls: edit, edit             (dark-mode toggle)
+devin    ◀ tool_calls: todowrite, write       (README.md)
+devin    ◀ tool_calls: todowrite, bash        (ls to verify)
+devin    ◀ "Refactoring complete! All 6 steps finished successfully ✅ …"
+```
+
+Ten rounds, ~17 client-executed tool calls; opencode did every file operation in its
+own workspace — devin never touched the client's files. The same pattern runs
+`claude-live` and `codex-live` queues side by side on one proxy. Why interactive
+beats one-shot CLI backends for this: no prompt-size ceiling (the job is handed over
+as a file — one-shot `devin -p` dies near ~80KB, smaller than opencode's system
+prompt), a warm session instead of a cold spawn per turn, and tool calls, which the
+one-shot backends don't emit today. Setup and the reference driver:
+`examples/interactive-worker/README.md`.
+
 ## Run it as a service (watchdog)
 
 Keeps routsi up across crashes and logins — launchd on macOS, systemd-user on Linux:

@@ -23,3 +23,17 @@ as a plain `Backend` + config `type`, plus one dynamic-register endpoint so a wo
 join without editing config — nothing else in the proxy changes.
 
 Grounding: [`docs/research/`](../research/). Spike: [`docs/spikes/`](../spikes/).
+
+## Tool-calling track (2026-07-29): make enveloped backends first-class
+
+Today `tools`/`tool_calls` survive **only** on the raw forward path; every enveloped
+backend (translator, CLI agents, workers, memory) drops them at the string-only
+`Backend` contract. This track fixes that. 008 is the foundation; 010–012 depend on it.
+
+| ADR | Title | Status | Spike |
+|-----|-------|--------|-------|
+| [008](008-structured-backend-contract.md) | Structured backend contract + tool-call wire types | Proposed | — |
+| [009](009-request-fidelity-enveloped-paths.md) | Request fidelity (params, response_format, images) | Proposed | — |
+| [010](010-toolnexus-tool-relay.md) | Toolnexus client-declared tool relay | Proposed | [004](../spikes/004-toolnexus-tool-relay.md) (partial) |
+| [011](011-cli-agent-tool-calling.md) | CLI-agent tool calling (emulation → MCP trampoline) | Proposed | [002](../spikes/002-cli-tool-emulation.md) ✅ live-proven · [003](../spikes/003-mcp-trampoline.md) planned |
+| [012](012-pull-worker-tools.md) | Tools through the pull-worker queue | Proposed | [005](../spikes/005-worker-tools.md) planned |

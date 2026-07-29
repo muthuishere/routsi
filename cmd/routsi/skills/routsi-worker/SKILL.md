@@ -87,6 +87,33 @@ expired or was already answered — just go back to polling).
 
 **d. Repeat from step a.**
 
+### 3b. Tool calling (when the job carries `tools`)
+
+A job may include the client's OpenAI tool schemas (`"tools": [...]` and optionally
+`"tool_choice"`). That means the CLIENT (an SDK, opencode, etc.) can execute functions for
+you — you only *decide* which to call; you never run them yourself.
+
+- To call tools, POST the answer as JSON to the raw endpoint (the `--text` form is
+  content-only):
+
+  ```sh
+  curl -s -X POST "<URL>/v1/workers/<NAME>/jobs/<jobid>" -H 'Content-Type: application/json' \
+    -d '{"tool_calls":[{"name":"write","arguments":{"filePath":"a.txt","content":"hi"}}]}'
+  ```
+
+  `arguments` may be a JSON object or an already-encoded string; the proxy normalizes to the
+  OpenAI wire shape (`finish_reason:"tool_calls"`, string arguments, generated call ids) and
+  the client executes the calls. Multiple calls in one array = parallel calls.
+- The results come back as the NEXT job on the same conversation: the `messages` array gains
+  your assistant `tool_calls` turn plus `role:"tool"` result messages. Continue until you can
+  answer with plain `{"content":"..."}`.
+- Never invent values that must come from a tool result — make the prerequisite call first.
+- Do NOT do the client's task with your own tools (don't create their files locally); the
+  whole point is that the client executes on its side.
+
+For a long-lived interactive TUI (devin/claude/codex) serving a queue via file-handoff — no
+prompt-size limits, warm context — see `examples/interactive-worker/` in the routsi repo.
+
 ### 4. Stopping
 
 There's no special stop command — just stop looping. If you're driving this yourself turn by

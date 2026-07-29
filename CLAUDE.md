@@ -157,6 +157,71 @@ silently falling through to `run` before this fix. Rewrote
 flow (Mode A) with the headless subprocess (`worker run --agent`) as Mode B. Additive only;
 `internal/server`, `internal/queue` untouched.
 
+## Tool-calling track (2026-07-29 — ADRs 008–012 Proposed, no code yet)
+
+Survey finding: OpenAI `tools`/`tool_calls` work ONLY on raw forward passthrough;
+every enveloped backend drops them — structural, at the string-only `Backend`
+contract (`backend.go:20`), `api.Message`/`RespMessage` have no tool fields, and an
+explicit `conversation_id` flips even a forward model into the lossy enveloped path
+(`server.go:211-219`). Five ADRs (all **Proposed** — awaiting owner OK, no code):
+008 structured `Result` contract + tool wire types (foundation) · 009 request
+fidelity (sampling params/response_format/images, explicit-never-silent drops via
+`X-Dropped-Params`) · 010 toolnexus client-declared tool relay (builtins stay off;
+toolnexus v0.10.0 already ships ToAnthropic/ToGemini adapters — open question is
+declaration-only/no-execute mode, spike 004) · 011 CLI-agent tool calling — Phase A
+schema-constrained emulation, **live-proven in spike 002**: `claude -p --json-schema`
+(inline JSON, not a file) emitted a valid `get_weather` tool_call and completed the
+tool-result round trip on haiku, one-shot, no process persistence; Phase B MCP
+trampoline (park the MCP call across HTTP turns) gated on spike 003 · 012 pull-worker
+tools (wire-additive job/answer fields + register-time capabilities, spike 005).
+Spikes: docs/spikes/002–005. Index: docs/adr/README.md "Tool-calling track".
+Spike 002 round 2 (2026-07-29, live): **all four CLIs** (claude/codex/copilot/devin)
+emitted a correct 3-call parallel tool batch with exact args; claude+devin also
+completed the tool-result→answer turn (devin via native `-r <sid>` resume — best
+continuation path). Gotchas recorded: codex needs OpenAI-strict schemas
+(`arguments` as JSON-string = OpenAI's own wire shape) and is minutes-slow;
+copilot needs fence-extraction past its terminal footer; devin needs a trusted
+cwd. ADR-011 updated: `emulated` default for all four, parallel calls in v1.
+Round 3 (same day): 10-tool adversarial catalog (near-duplicate names, enums,
+arrays, ISO codes, a search→book dependency) — **zero failures** on every CLI
+tested: 6-call bursts argument-exact on all four; dependency trap passed (search
+only, no invented flight_id) on claude/copilot/devin; distractor answered without
+tools; devin completed the full search→book chain across turns via session
+resume. One lesson: resume-by-most-recent-session grabs the wrong conversation —
+per-conversation session mapping (already in devin.go) is mandatory.
+
+## Tool calls SHIPPED on the queue path + interactive-worker pattern (2026-07-29)
+
+Owner-directed fast build (ADR-008/012 minimal slices now Accepted): `api.ToolCall`/
+`api.Result`, `Message` gains tool_calls/tool_call_id/name, `ChatRequest` gains
+tools/tool_choice; new optional `backend.ResultBackend` (only QueueBackend implements)
+— server envelope prefers it and emits `tool_calls` + `finish_reason:"tool_calls"` in
+both non-stream and stream (indexed deltas via NewToolChunk/FinishChunk); queue Job
+carries tools, worker answer POST accepts `{content, tool_calls}` (OpenAI or
+simplified `{name,arguments}` shape, server normalizes + synthesizes call ids). All
+other backends byte-identical. vet+tests green.
+**E2E live-proven (spike 006)**: opencode → routsi `devin-live` queue → interactive
+devin TUI (ghostty-sendkeys, `--permission-mode dangerous` + accept-edits) driven by a
+file-handoff driver (`job-<id>.md` in, `answer-<id>.json` out, 45s re-nudge for
+free-plan throttle) → devin emitted `write` tool_call → **opencode executed it and a
+150-line localStorage todo app landed in opencode's cwd** → tool result round-tripped
+→ devin's final text rendered. Key findings: `devin -p` is DEAD for big prompts
+(~80KB SIGPIPE ceiling, argv and --prompt-file alike; stdin panics) — opencode system
+prompts exceed it; single-threaded driver loses concurrent jobs to the 5-min maxWait
+(opencode fires title+main together — needs poll-while-busy or per-slot queues);
+`pkill -f opencode` kills routsi if the config path contains "opencode". Extended same day: **all three CLI agents run as interactive workers
+simultaneously** — devin-live, claude-live, codex-live queues on one routsi, each a
+ghostty TUI + parameterized driver (`worker-driver.js <sendkeys> <spool> <queue>
+<workdir>`, lives in ~/oce for now, NOT yet in-repo). opencode 5-step task per
+worker: devin 10 rounds, claude 7 (skipped style.css and said so), codex 14 (plan-
+tracked via todowrite, all 5 steps). Automation traps in spike 006: kill opencode by
+walking the ghostty process tree (pattern kills hit routsi / miss the TUI);
+opencode's external-dir permission modal ignores injected keys — launch from a real
+project root, avoid symlinked cwds; session db at
+~/.local/share/opencode/opencode.db (move aside to reset sticky model/sessions,
+auth.json separate). Next: promote the driver into `routsi worker` / the
+routsi-worker skill (ADR-005 extension).
+
 ## Current state (2026-07-23)
 
 Phase 1 built and tested: routing (`auto` + rules), bypass, stickiness with
