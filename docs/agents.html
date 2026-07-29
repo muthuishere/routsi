@@ -88,6 +88,9 @@
   permission_mode: auto</pre></div>
     <p>Same pattern for <code>codex</code>, <code>copilot</code>, <code>claude</code>. Their model lists come from <code>~/.config/routsi/known-models.json</code> (editable); Devin's is discovered live from the CLI.</p>
 
+    <h2 id="tools">Tool calling (function calling)</h2>
+    <p>Agent models speak <strong>OpenAI function calling</strong>: send <code>tools</code> and the agent <em>decides</em> which to call — your client executes them. Under the hood the schemas are rendered into the prompt with a fenced-JSON protocol and the reply is parsed into wire-correct <code>tool_calls</code> (<code>finish_reason:"tool_calls"</code>); a parse failure degrades to plain text, never a fabricated call. This is how <strong>opencode runs with codex or devin as its model</strong> — see the <a class="link" href="https://github.com/muthuishere/routsi/blob/main/docs/opencode.md" target="_blank" rel="noopener">opencode guide</a>, including a custom JS decider that picks the agent per request. For devin + large clients prefer the <a class="link" href="workers.html#tools">interactive worker</a> (one-shot <code>devin -p</code> has a ~80KB prompt ceiling).</p>
+
     <p style="margin-top:44px"><a class="btn btn-ghost" href="workers.html">Next: Pull-workers →</a></p>
   </main>
 </div>
