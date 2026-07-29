@@ -22,6 +22,14 @@ type Backend interface {
 	Stream(ctx context.Context, req *api.ChatRequest, emit func(delta string)) error
 }
 
+// ResultBackend is an optional extension: backends that can return structured
+// answers (tool calls, not just text) implement it, and the server prefers it
+// over Complete/Stream. Only the pull-worker queue implements it today
+// (ADR-008/012 minimal slice).
+type ResultBackend interface {
+	CompleteResult(ctx context.Context, req *api.ChatRequest) (api.Result, error)
+}
+
 // Registry maps handler names (models.yaml `handler:`) to custom Backends.
 type Registry struct {
 	handlers map[string]Backend

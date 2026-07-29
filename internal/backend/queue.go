@@ -21,6 +21,13 @@ func NewQueue(broker *queue.Broker, name string) *QueueBackend {
 }
 
 func (q *QueueBackend) Complete(ctx context.Context, req *api.ChatRequest) (string, error) {
+	res, err := q.broker.Submit(ctx, q.name, req)
+	return res.Content, err
+}
+
+// CompleteResult returns the worker's structured answer (text and/or tool
+// calls); the server prefers this over Complete (backend.ResultBackend).
+func (q *QueueBackend) CompleteResult(ctx context.Context, req *api.ChatRequest) (api.Result, error) {
 	return q.broker.Submit(ctx, q.name, req)
 }
 

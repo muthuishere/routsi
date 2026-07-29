@@ -13,8 +13,31 @@ import (
 // Message is one chat message. Content stays raw because OpenAI allows both a
 // string and a content-part array.
 type Message struct {
-	Role    string          `json:"role"`
-	Content json.RawMessage `json:"content"`
+	Role       string          `json:"role"`
+	Content    json.RawMessage `json:"content"`
+	ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
+	Name       string          `json:"name,omitempty"`
+}
+
+// ToolCall is one function call in an assistant reply (OpenAI wire shape:
+// Arguments is a JSON-encoded string, not an object).
+type ToolCall struct {
+	Index    *int         `json:"index,omitempty"` // set on streaming deltas only
+	ID       string       `json:"id"`
+	Type     string       `json:"type"` // always "function"
+	Function ToolFunction `json:"function"`
+}
+
+type ToolFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// Result is a structured backend answer: plain text, tool calls, or both.
+type Result struct {
+	Content   string
+	ToolCalls []ToolCall
 }
 
 // Text returns the message content as plain text, best-effort: a string as-is,
@@ -41,10 +64,12 @@ func (m Message) Text() string {
 // ChatRequest is the routed view of a /v1/chat/completions body. Raw keeps the
 // untouched original so forwards preserve every field we did not model.
 type ChatRequest struct {
-	Model          string    `json:"model"`
-	Messages       []Message `json:"messages"`
-	Stream         bool      `json:"stream"`
-	ConversationID string    `json:"conversation_id"`
+	Model          string          `json:"model"`
+	Messages       []Message       `json:"messages"`
+	Stream         bool            `json:"stream"`
+	ConversationID string          `json:"conversation_id"`
+	Tools          json.RawMessage `json:"tools,omitempty"`
+	ToolChoice     json.RawMessage `json:"tool_choice,omitempty"`
 
 	Raw []byte `json:"-"`
 }
@@ -99,8 +124,9 @@ type Choice struct {
 }
 
 type RespMessage struct {
-	Role    string `json:"role,omitempty"`
-	Content string `json:"content"`
+	Role      string     `json:"role,omitempty"`
+	Content   string     `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // NewCompletion wraps text as a chat.completion answered by model.
@@ -113,6 +139,40 @@ func NewCompletion(model, text string) ChatResponse {
 		Model:   model,
 		Choices: []Choice{{Message: &RespMessage{Role: "assistant", Content: text}, FinishReason: &stop}},
 	}
+}
+
+// NewResultCompletion wraps a structured Result as a chat.completion; tool
+// calls flip finish_reason to "tool_calls" per the OpenAI contract.
+func NewResultCompletion(model string, res Result) ChatResponse {
+	c := NewCompletion(model, res.Content)
+	if len(res.ToolCalls) > 0 {
+		fr := "tool_calls"
+		c.Choices[0].Message.ToolCalls = res.ToolCalls
+		c.Choices[0].FinishReason = &fr
+	}
+	return c
+}
+
+// NewToolChunk builds a chat.completion.chunk whose delta carries tool calls
+// (indexed, as OpenAI streams them), followed by a finish chunk from the
+// caller.
+func NewToolChunk(id, model string, calls []ToolCall) ChatResponse {
+	c := ChatResponse{ID: id, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: model}
+	indexed := make([]ToolCall, len(calls))
+	for i := range calls {
+		idx := i
+		indexed[i] = calls[i]
+		indexed[i].Index = &idx
+	}
+	c.Choices = []Choice{{Delta: &RespMessage{ToolCalls: indexed}}}
+	return c
+}
+
+// FinishChunk builds the final chunk with an explicit finish_reason.
+func FinishChunk(id, model, reason string) ChatResponse {
+	c := ChatResponse{ID: id, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: model}
+	c.Choices = []Choice{{Delta: &RespMessage{}, FinishReason: &reason}}
+	return c
 }
 
 // NewChunk builds one chat.completion.chunk carrying a content delta; pass

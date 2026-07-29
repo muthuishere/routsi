@@ -26,7 +26,7 @@ func startWorker(t *testing.T, b *Broker, name, reply string, wg *sync.WaitGroup
 			t.Errorf("worker got no job")
 			return
 		}
-		if err := b.Answer(name, job.ID, reply); err != nil {
+		if err := b.Answer(name, job.ID, api.Result{Content: reply}); err != nil {
 			t.Errorf("answer: %v", err)
 		}
 	}()
@@ -46,8 +46,8 @@ func TestSubmitPollAnswerRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit: %v", err)
 	}
-	if ans != "hello back" {
-		t.Fatalf("answer = %q", ans)
+	if ans.Content != "hello back" {
+		t.Fatalf("answer = %q", ans.Content)
 	}
 	wg.Wait()
 	if s, _ := b.Status("q"); s.Served != 1 {
@@ -79,8 +79,8 @@ func TestDuplicateAnswerRejected(t *testing.T) {
 			done <- "no job"
 			return
 		}
-		first := b.Answer("q", job.ID, "one")
-		second := b.Answer("q", job.ID, "two")
+		first := b.Answer("q", job.ID, api.Result{Content: "one"})
+		second := b.Answer("q", job.ID, api.Result{Content: "two"})
 		if first != nil {
 			done <- "first failed"
 			return
@@ -93,8 +93,8 @@ func TestDuplicateAnswerRejected(t *testing.T) {
 	}()
 	waitPresent(t, b, "q")
 	ans, err := b.Submit(context.Background(), "q", testReq("hi"))
-	if err != nil || ans != "one" {
-		t.Fatalf("submit = %q, %v", ans, err)
+	if err != nil || ans.Content != "one" {
+		t.Fatalf("submit = %q, %v", ans.Content, err)
 	}
 	if got := <-done; got != "ok" {
 		t.Fatalf("worker: %s", got)
@@ -122,7 +122,7 @@ func TestAnswerAfterTimeoutDropped(t *testing.T) {
 	}
 	<-polled
 	// A late answer for the dropped job must be rejected, not panic.
-	if err := b.Answer("q", jobID, "late"); !errors.Is(err, ErrJobNotInflight) {
+	if err := b.Answer("q", jobID, api.Result{Content: "late"}); !errors.Is(err, ErrJobNotInflight) {
 		t.Fatalf("late answer: want ErrJobNotInflight, got %v", err)
 	}
 }

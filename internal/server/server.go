@@ -394,13 +394,48 @@ func (s *Server) workerPoll(w http.ResponseWriter, r *http.Request) {
 func (s *Server) workerAnswer(w http.ResponseWriter, r *http.Request) {
 	name, id := r.PathValue("name"), r.PathValue("id")
 	var body struct {
-		Content string `json:"content"`
+		Content   string `json:"content"`
+		ToolCalls []struct {
+			ID       string `json:"id"`
+			Type     string `json:"type"`
+			Function *struct {
+				Name      string `json:"name"`
+				Arguments string `json:"arguments"`
+			} `json:"function"`
+			// simplified worker shape: {"name":..., "arguments":{...}}
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
+		} `json:"tool_calls"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 20<<20)).Decode(&body); err != nil {
 		httpError(w, http.StatusBadRequest, "answer: JSON body {\"content\":\"...\"} required")
 		return
 	}
-	if err := s.broker.Answer(name, id, body.Content); err != nil {
+	res := api.Result{Content: body.Content}
+	for i, tc := range body.ToolCalls {
+		call := api.ToolCall{ID: tc.ID, Type: tc.Type}
+		if call.Type == "" {
+			call.Type = "function"
+		}
+		if call.ID == "" {
+			call.ID = fmt.Sprintf("call_%s_%d", id, i)
+		}
+		if tc.Function != nil {
+			call.Function = api.ToolFunction{Name: tc.Function.Name, Arguments: tc.Function.Arguments}
+		} else {
+			args := string(tc.Arguments)
+			var asStr string
+			if json.Unmarshal(tc.Arguments, &asStr) == nil {
+				args = asStr // worker sent arguments as a JSON-encoded string already
+			}
+			if args == "" {
+				args = "{}"
+			}
+			call.Function = api.ToolFunction{Name: tc.Name, Arguments: args}
+		}
+		res.ToolCalls = append(res.ToolCalls, call)
+	}
+	if err := s.broker.Answer(name, id, res); err != nil {
 		httpError(w, http.StatusConflict, "answer: %v", err)
 		return
 	}
@@ -427,14 +462,28 @@ func levelOf(levels map[string]string, member string) string {
 // envelope dispatches to a Backend and wraps the answer as OpenAI JSON/SSE.
 // It returns the usage it reported so the caller can record metrics.
 func (s *Server) envelope(w http.ResponseWriter, r *http.Request, t *target, req *api.ChatRequest) (*api.Usage, error) {
+	rb, structured := t.backend.(backend.ResultBackend)
+
 	if !req.Stream {
-		text, err := t.backend.Complete(r.Context(), req)
-		if err != nil {
-			httpError(w, backendStatus(err), "backend %s: %v", t.model.Name, err)
-			return nil, err
+		var resp api.ChatResponse
+		var text string
+		if structured {
+			res, err := rb.CompleteResult(r.Context(), req)
+			if err != nil {
+				httpError(w, backendStatus(err), "backend %s: %v", t.model.Name, err)
+				return nil, err
+			}
+			resp, text = api.NewResultCompletion(t.model.Name, res), res.Content
+		} else {
+			var err error
+			text, err = t.backend.Complete(r.Context(), req)
+			if err != nil {
+				httpError(w, backendStatus(err), "backend %s: %v", t.model.Name, err)
+				return nil, err
+			}
+			resp = api.NewCompletion(t.model.Name, text)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		resp := api.NewCompletion(t.model.Name, text)
 		resp.Usage = api.EstimateUsage(req, text)
 		return resp.Usage, json.NewEncoder(w).Encode(resp)
 	}
@@ -463,8 +512,20 @@ func (s *Server) envelope(w http.ResponseWriter, r *http.Request, t *target, req
 	// a heartbeat can never interleave into a half-written frame.
 	deltaCh := make(chan string)
 	doneCh := make(chan error, 1)
+	var structRes api.Result // written before doneCh send; read after doneCh recv
 	go func() {
 		defer close(deltaCh)
+		if structured {
+			res, err := rb.CompleteResult(r.Context(), req)
+			if err == nil {
+				structRes = res
+				if res.Content != "" {
+					deltaCh <- res.Content
+				}
+			}
+			doneCh <- err
+			return
+		}
 		doneCh <- t.backend.Stream(r.Context(), req, func(delta string) {
 			if delta != "" {
 				deltaCh <- delta
@@ -518,7 +579,13 @@ loop:
 		}
 		return nil, streamErr
 	}
-	final := api.NewChunk(id, t.model.Name, "", true)
+	var final api.ChatResponse
+	if len(structRes.ToolCalls) > 0 {
+		writeChunk(api.NewToolChunk(id, t.model.Name, structRes.ToolCalls))
+		final = api.FinishChunk(id, t.model.Name, "tool_calls")
+	} else {
+		final = api.NewChunk(id, t.model.Name, "", true)
+	}
 	final.Usage = api.EstimateUsage(req, streamed.String())
 	writeChunk(final)
 	fmt.Fprint(w, "data: [DONE]\n\n")

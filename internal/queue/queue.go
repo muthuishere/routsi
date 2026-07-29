@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"sync"
 	"time"
@@ -27,17 +28,19 @@ var ErrJobNotInflight = errors.New("job not in flight (expired or already answer
 
 // Job is one question handed to a worker.
 type Job struct {
-	ID             string        `json:"id"`
-	Model          string        `json:"model"`
-	ConversationID string        `json:"conversation_id,omitempty"`
-	Messages       []api.Message `json:"messages"`
+	ID             string          `json:"id"`
+	Model          string          `json:"model"`
+	ConversationID string          `json:"conversation_id,omitempty"`
+	Messages       []api.Message   `json:"messages"`
+	Tools          json.RawMessage `json:"tools,omitempty"`
+	ToolChoice     json.RawMessage `json:"tool_choice,omitempty"`
 
 	answer chan result
 }
 
 type result struct {
-	content string
-	err     error
+	res api.Result
+	err error
 }
 
 type queue struct {
@@ -147,24 +150,26 @@ func (b *Broker) present(q *queue) bool {
 
 // Submit enqueues a question and blocks until a worker answers, ctx ends, or
 // maxWait elapses. Returns ErrNoWorker fast if no worker is present.
-func (b *Broker) Submit(ctx context.Context, name string, req *api.ChatRequest) (string, error) {
+func (b *Broker) Submit(ctx context.Context, name string, req *api.ChatRequest) (api.Result, error) {
 	q := b.get(name)
 	if q == nil || !b.present(q) {
-		return "", ErrNoWorker
+		return api.Result{}, ErrNoWorker
 	}
 	job := &Job{
 		ID:             randID(),
 		Model:          req.Model,
 		ConversationID: req.ConversationID,
 		Messages:       req.Messages,
+		Tools:          req.Tools,
+		ToolChoice:     req.ToolChoice,
 		answer:         make(chan result, 1),
 	}
 	select {
 	case q.pending <- job:
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return api.Result{}, ctx.Err()
 	default:
-		return "", ErrNoWorker // pending full ⇒ worker not draining
+		return api.Result{}, ErrNoWorker // pending full ⇒ worker not draining
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, b.maxWait)
@@ -173,13 +178,13 @@ func (b *Broker) Submit(ctx context.Context, name string, req *api.ChatRequest) 
 	case r := <-job.answer:
 		if r.err != nil {
 			b.bumpErr(q, r.err.Error())
-			return "", r.err
+			return api.Result{}, r.err
 		}
-		return r.content, nil
+		return r.res, nil
 	case <-tctx.Done():
 		q.drop(job.ID)
 		b.bumpErr(q, "no worker answered in time")
-		return "", ErrNoWorker
+		return api.Result{}, ErrNoWorker
 	}
 }
 
@@ -214,7 +219,7 @@ func (b *Broker) Poll(ctx context.Context, name string, wait time.Duration) (*Jo
 // Answer delivers a worker's answer to the blocked Submit. Idempotent: a
 // second answer for the same job (or one that already timed out) returns
 // ErrJobNotInflight.
-func (b *Broker) Answer(name, jobID, content string) error {
+func (b *Broker) Answer(name, jobID string, res api.Result) error {
 	q := b.get(name)
 	if q == nil {
 		return ErrJobNotInflight
@@ -229,7 +234,7 @@ func (b *Broker) Answer(name, jobID, content string) error {
 	if !ok {
 		return ErrJobNotInflight
 	}
-	job.answer <- result{content: content}
+	job.answer <- result{res: res}
 	return nil
 }
 
