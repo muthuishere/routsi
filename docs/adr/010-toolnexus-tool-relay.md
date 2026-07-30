@@ -1,6 +1,6 @@
 # ADR-010: Client-declared tool relay through the toolnexus translator
 
-- **Status:** Proposed — tracked as routsi issue #1 (with a documented route-around; not release-blocking) — **mechanism settled, unblocks when toolnexus ships F1-a/F2-a in the Go port** (upstream ADR-0010 Accepted; see spike 004). Relay is a *use of the §10 suspend/resume primitive*, not a new translator path — the Decision below is amended accordingly.
+- **Status:** **Accepted — shipped 2026-07-30.** Implemented as a use of toolnexus v0.12.0's §11 single-turn translation (`Client.Translate`), NOT the suspend/resume relay: pass-through needs no loop, no memory and no resume because the client resends history every turn. Items 1+2 done; item 4 struck (already free upstream); item 3 (`Builtins: false` + collision guard) unchanged. Mode B (proxy-managed memory) can still use relay + durable resume if it ever needs tools.
 - **Date:** 2026-07-29
 - **Deciders:** owner + routsi
 

@@ -222,6 +222,26 @@ project root, avoid symlinked cwds; session db at
 auth.json separate). Next: promote the driver into `routsi worker` / the
 routsi-worker skill (ADR-005 extension).
 
+## 2026-07-30 (final) — ADR-010 SHIPPED: tool relay on translated upstreams
+
+toolnexus published **v0.12.0** ("single-turn translation, all six ports"; module tag
+`golang/v0.12.0`). routsi wired it and MERGED to main (5806b9f): the 400 refusal on
+anthropic/gemini upstreams is gone, replaced by real relay —
+`Toolnexus.CompleteResult` builds a `toolnexus.TranslateRequest` from the client's
+messages+tools verbatim, calls `Client.Translate` (ONE provider call, no tool execution,
+no agent loop, no conversation store), and maps `TranslatedToolCall` → `api.ToolCall`.
+~40 lines, stateless — the client resends history each turn, so nothing is parked.
+Verified against the PUBLISHED module (no replace directive): turn 1, OpenAI tools →
+Anthropic `input_schema` declarations, `stop_reason:tool_use` → OpenAI `tool_calls` with
+the provider call id intact and arguments as a JSON string; turn 2, client `tool` result
++ tool_call_id → native `tool_result` block, final text carries the data. go vet + full
+suite green. ADR-010 **Accepted**; item 4 struck (free upstream), item 3 unchanged.
+README matrix now says ✅ for every path; **every routsi path supports tools.**
+Requires toolnexus/golang ≥ v0.12.0. Lesson worth keeping: the parking trampoline we
+almost built was solving a problem the protocol had already solved — a peer reading our
+own code comment ("the OpenAI client resends full history each request") is what caught
+it.
+
 ## 2026-07-30 — ADR-010 REFRAMED AGAIN: Mode A wants a single-turn translate, not relay
 
 Peer review from the toolnexus desk (they read internal/backend/toolnexus.go) killed our
