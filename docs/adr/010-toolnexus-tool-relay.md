@@ -1,6 +1,6 @@
 # ADR-010: Client-declared tool relay through the toolnexus translator
 
-- **Status:** Proposed
+- **Status:** Proposed — **mechanism settled, unblocks when toolnexus ships F1-a/F2-a in the Go port** (upstream ADR-0010 Accepted; see spike 004). Relay is a *use of the §10 suspend/resume primitive*, not a new translator path — the Decision below is amended accordingly.
 - **Date:** 2026-07-29
 - **Deciders:** owner + routsi
 
@@ -35,8 +35,22 @@ function calling, while the same request to OpenRouter passthrough works.
 3. `Builtins: false` stays. A config guard additionally rejects any client tool
    whose name collides with a toolnexus builtin name, so a future toolkit change
    can't be socially engineered into executing something proxy-side.
-4. Proxy-managed memory (`Ask` + ConversationStore) must store tool-call/tool-result
-   turns structurally so multi-turn tool use survives the transcript.
+4. ~~Proxy-managed memory (`Ask` + ConversationStore) must store tool-call/tool-result
+   turns structurally~~ — **STRUCK 2026-07-30: already true upstream, no work needed.**
+   `Ask` persists `res.Messages` verbatim (`client.go:648`) and the loop stores raw
+   provider `tool_use` blocks with ids (`client.go:1153-1159`). Verified in spike 004.
+
+**Amended mechanism (2026-07-30).** Implement relay as a **declaration-only tool over
+§10 suspend/resume**, not as a bespoke pass-through in the translator: each client tool
+becomes a toolkit tool that returns `Pending(Request{…})` on first call, so the run
+halts with the model's call as structured data and nothing executes proxy-side; on the
+next HTTP turn routsi resumes with the client's tool results as the `Answer`, which
+become real `tool_result` blocks. This reuses one hardened primitive instead of adding a
+second mechanism, and works on the Anthropic-native loop routsi translates to. Requires
+upstream **F1-a** (`RunWithAnswer`/`Ask(…, answer)`, filling every outstanding
+`tool_result` slot and replacing the placeholder error) and **F2-a** (one `Request`
+carrying all N parallel calls), plus a routsi-side bump from `toolnexus/golang@v0.10.0`
+to a version that has the primitive (≥0.11.0).
 
 ## Alternatives
 
@@ -47,11 +61,18 @@ function calling, while the same request to OpenRouter passthrough works.
 
 ## Consequences
 
-- Depends on ADR-008 landing first.
-- Depends on the toolnexus toolkit exposing pass-through tool declarations — spike
-  004 verifies its API surface before this ADR can be Accepted.
+- Depends on ADR-008 landing first (done — minimal slice shipped).
+- Depends on toolnexus F1-a + F2-a in the Go port, and on routsi bumping the toolnexus
+  dependency to ≥0.11.0. Declaration translation (`ToAnthropic`/`ToGemini`) and the
+  ConversationStore round-trip are already free upstream.
+- The relay tool set is per-request (the client declares tools per call), so the toolkit
+  must be built per request rather than cached per model.
 
 ## Open questions
 
-- Does toolnexus's `Ask` conversation store round-trip non-text blocks today, or
-  does it need upstream (toolnexus repo) work? → spike 004.
+- ~~Does toolnexus's `Ask` conversation store round-trip non-text blocks today?~~
+  **Answered: yes, verified — no upstream work** (spike 004).
+- Anthropic transcript replayability: on a durable halt the assistant message keeps all
+  N `tool_use` blocks while the follow-up carries only the first `tool_result`, which
+  Anthropic rejects. Upstream has this filed as an observation; routsi's replay shape is
+  exactly what triggers it, so confirm it is fixed on the relay path before shipping.

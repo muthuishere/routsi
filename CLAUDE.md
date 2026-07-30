@@ -222,7 +222,39 @@ project root, avoid symlinked cwds; session db at
 auth.json separate). Next: promote the driver into `routsi worker` / the
 routsi-worker skill (ADR-005 extension).
 
-## 2026-07-30 (later) — `routsi worker join` shipped; ADR-010 blocked upstream
+## 2026-07-30 — ADR-010 mechanism SETTLED (peer desk); routsi-desk on the hub
+
+toolnexus#37 answered by the **toolnexus desk** (a peer agent registered on the messenger
+hub as `toolnexus`; its spikes 0001 source-verified + 0002 executable, 14/14 green on
+unmodified library code). **Relay is a USE of toolnexus's shipped §10 suspend/resume
+primitive** (`resolvePending`, client.go:1012) — a declaration-only tool returns
+`Pending` and, on retry-with-answer, returns the caller's output as `tool_result`. NOT a
+new translator path; ADR-010's Decision amended, spike 004 rewritten. Verified here
+independently: ConversationStore already round-trips tool_use/tool_result (Ask persists
+res.Messages verbatim, client.go:648; raw blocks with ids, :1153-1159) ⇒ **ADR-010 item 4
+STRUCK, no upstream work**; adapters ToAnthropic/ToGemini already free; BUT the primitive
+is absent from `toolnexus/golang@v0.10.0` (our pin) and present in main/0.11.0 ⇒
+**routsi must bump the dep to ≥0.11.0** (our task). Single-call in-process relay works
+TODAY unmodified, incl. on the Anthropic-native loop routsi translates to + streaming.
+Two upstream gaps block us, both measured: **F1-a** answer-carrying resume
+(`RunWithAnswer`) that fills EVERY outstanding tool_result slot and replaces the
+placeholder error (durable halt writes one, client.go:1015), **F2-a** one Request
+carrying all N parallel calls (§10 surfaces only the first — measured "3 tool_calls vs 1
+tool_result"). Both REQUIRED for routsi (stateless proxy ⇒ always the durable path;
+OpenAI clients execute all N calls). Upstream awaits an OWNER RULING on F1-a/F2-a before
+implementing across 6 ports; I asked for the Go port first. routsi ADR-010 ships the day
+it lands.
+
+**Hub identity:** registered as `routsi-desk` — durable subscription (channels
+hook,ceo,askceo) → sink `~/.local/bin/routsi-desk-sink` on 127.0.0.1:9400, envelopes to
+`~/.config/routsi-desk/inbox.ndjson` (dedupes by id; cursor advances only on 2xx so a
+dead sink loses nothing). CAVEAT: messenger stores subscriptions in config.toml and the
+running hub loaded them at boot — a new sub is NOT hot-reloaded, so pushes don't flow
+until the hub restarts (not done: it serves the owner's WhatsApp/cryptodesk lanes).
+Until then read the hub store directly: `~/.config/messenger/inbox.ndjson` with a cursor
+in `~/.config/routsi-desk/cursor`.
+
+## 2026-07-30 (later) — `routsi worker join` shipped; ADR-010 was blocked upstream
 
 `routsi worker join` (cmd/routsi/join.go, wired in skills.go dispatch) productizes the
 interactive-worker pattern: registers the queue, long-polls, writes each job (transcript
