@@ -50,7 +50,32 @@ func (t *Toolnexus) init(ctx context.Context) error {
 	return t.err
 }
 
+// CompleteResult implements backend.ResultBackend so the translator can refuse
+// `tools` explicitly instead of dropping them. It cannot yet RELAY a
+// client-declared tool: the library's adapters translate declarations only, so
+// there is no way to hand a provider's tool_use back as OpenAI tool_calls
+// without executing something proxy-side (ADR-010). Failing loudly beats
+// leaving a client waiting for tool_calls that can never arrive.
+func (t *Toolnexus) CompleteResult(ctx context.Context, req *api.ChatRequest) (api.Result, error) {
+	if len(req.Tools) > 0 {
+		return api.Result{}, fmt.Errorf(
+			"%w: %q is a translated (%s) upstream — routsi cannot relay tool calls through the translator yet. "+
+				"Route tool-calling traffic at an OpenAI-compatible forward model (e.g. the same provider via OpenRouter, `type: forward`), "+
+				"a CLI-agent model (devin/codex/claude/copilot), or a pull-worker queue — all three support tools today",
+			ErrToolsUnsupported, t.model.Name, t.model.Style)
+	}
+	text, err := t.Complete(ctx, req)
+	return api.Result{Content: text}, err
+}
+
 func (t *Toolnexus) Complete(ctx context.Context, req *api.ChatRequest) (string, error) {
+	if len(req.Tools) > 0 {
+		// Reached only via the plain Backend path (e.g. Stream); keep the same
+		// contract as CompleteResult rather than silently dropping tools.
+		if _, err := t.CompleteResult(ctx, req); err != nil {
+			return "", err
+		}
+	}
 	if err := t.init(ctx); err != nil {
 		return "", fmt.Errorf("toolnexus %s: %w", t.model.Name, err)
 	}

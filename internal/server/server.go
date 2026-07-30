@@ -340,6 +340,9 @@ func backendStatus(err error) int {
 	if errors.Is(err, queue.ErrNoWorker) {
 		return http.StatusServiceUnavailable
 	}
+	if errors.Is(err, backend.ErrToolsUnsupported) {
+		return http.StatusBadRequest // the request is wrong for this model, not a transient fault
+	}
 	return http.StatusBadGateway
 }
 

@@ -6,6 +6,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/muthuishere/routsi/internal/api"
@@ -21,6 +22,11 @@ type Backend interface {
 	// Stream pushes answer deltas through emit as they are produced.
 	Stream(ctx context.Context, req *api.ChatRequest, emit func(delta string)) error
 }
+
+// ErrToolsUnsupported is returned by a backend that cannot honour a request's
+// `tools`. Silently dropping them is worse than failing: the client would wait
+// for tool_calls that can never arrive (ADR-008). The server maps this to 400.
+var ErrToolsUnsupported = errors.New("model does not support tools")
 
 // ResultBackend is an optional extension: backends that can return structured
 // answers (tool calls, not just text) implement it, and the server prefers it

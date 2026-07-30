@@ -248,6 +248,18 @@ hack (AfterLLM exposes the raw provider payload; a hook returning an error abort
 **Their stale premise, corrected:** they thought ADR-008 blocked everything; it shipped
 first (681863d), so (b)+(c) are immediately usable.
 
+**WORKAROUND SHIPPED (2026-07-30), so we do not block on upstream:** the translated
+path now REFUSES tools explicitly instead of dropping them — `backend.ErrToolsUnsupported`
+(backend.go), `Toolnexus.CompleteResult` (making Toolnexus a ResultBackend) returns it when
+`req.Tools` is non-empty, and `backendStatus` maps it to **400** (not 502 — the request is
+wrong for that model, not a transient fault). The message names the three paths that DO
+work, so it is actionable. Live-verified through the real server: an anthropic-style
+forward + tools ⇒ HTTP 400 with guidance; guard does not fire without tools. Tool-calling
+support matrix added to README. Net: the only hole is the translated style, it fails
+loudly, and the documented route-around (reach Anthropic/Gemini via an OpenAI-compatible
+gateway as `type: forward`, e.g. OpenRouter) works today. toolnexus can land Translate
+whenever it wants — nothing of ours waits on it.
+
 **FIXED (ours, 2026-07-30):** `split()` fidelity bug they caught — history entries were
 `{role, content: m.Text()}`, so a tool result lost `tool_call_id` and an assistant turn
 lost `tool_calls` entirely; multi-turn tool use could not work regardless of upstream. Now

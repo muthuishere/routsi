@@ -1,10 +1,14 @@
 package backend
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/muthuishere/routsi/internal/api"
+	"github.com/muthuishere/routsi/internal/config"
 )
 
 // A tool-calling conversation must survive the trip into toolnexus history:
@@ -78,5 +82,36 @@ func TestSplitCarriesToolTurns(t *testing.T) {
 	}
 	if got := history[2].(map[string]any)["tool_call_id"]; got != "call_1" {
 		t.Fatalf("tool_call_id dropped from history: %v", got)
+	}
+}
+
+// A translated upstream cannot relay tool calls yet (ADR-010). It must say so
+// rather than drop `tools` and leave the client waiting for tool_calls that
+// can never arrive.
+func TestToolnexusRefusesToolsExplicitly(t *testing.T) {
+	tn := NewToolnexus(&config.Model{Name: "claude-native", Style: config.StyleAnthropic})
+	req := &api.ChatRequest{
+		Model:    "claude-native",
+		Messages: []api.Message{{Role: "user", Content: json.RawMessage(`"hi"`)}},
+		Tools:    json.RawMessage(`[{"type":"function","function":{"name":"w"}}]`),
+	}
+
+	if _, err := tn.CompleteResult(context.Background(), req); !errors.Is(err, ErrToolsUnsupported) {
+		t.Fatalf("CompleteResult err = %v, want ErrToolsUnsupported", err)
+	} else {
+		for _, want := range []string{"claude-native", "forward", "pull-worker"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error should point the user at an alternative (%q missing): %v", want, err)
+			}
+		}
+	}
+	if _, err := tn.Complete(context.Background(), req); !errors.Is(err, ErrToolsUnsupported) {
+		t.Fatalf("Complete err = %v, want ErrToolsUnsupported", err)
+	}
+
+	// Without tools the guard must not fire (it would break every normal request).
+	req.Tools = nil
+	if _, err := tn.CompleteResult(context.Background(), req); errors.Is(err, ErrToolsUnsupported) {
+		t.Fatal("guard fired on a request carrying no tools")
 	}
 }

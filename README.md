@@ -204,6 +204,31 @@ So `{"model":"codex","tools":[...]}` just works. Guide for wiring **opencode** t
 either flavor — plus a custom JS decider that picks the agent per request:
 [`docs/opencode.md`](docs/opencode.md).
 
+### Where tool calling works today
+
+| model type | tools | how |
+|---|---|---|
+| `forward` (OpenAI-compatible upstream) | ✅ full | raw byte passthrough — always worked |
+| `queue` (pull-worker) | ✅ full | job carries `tools`; worker answers with `tool_calls` |
+| `devin` / `codex` / `claude` / `copilot` | ✅ emulated | fenced-JSON protocol, parallel calls (ADR-011) |
+| `forward` with `style: anthropic\|gemini` (translated) | ❌ **explicit 400** | translator can't relay tool calls yet (ADR-010) |
+
+The translated path is the one hole, and it **fails loudly** rather than dropping
+`tools` and leaving a client waiting for calls that never arrive:
+
+```
+HTTP 400  "claude-native" is a translated (anthropic) upstream — routsi cannot relay
+tool calls through the translator yet. Route tool-calling traffic at an
+OpenAI-compatible forward model (e.g. the same provider via OpenRouter,
+`type: forward`), a CLI-agent model, or a pull-worker queue — all three support
+tools today
+```
+
+**The route-around:** reach Anthropic/Gemini models through an OpenAI-compatible
+gateway as a plain `forward` model (OpenRouter is the tested one) and tool calling
+works end to end today. Use the translated style only where you want native
+provider wire format without tools.
+
 ## Run it as a service (watchdog)
 
 Keeps routsi up across crashes and logins — launchd on macOS, systemd-user on Linux:
