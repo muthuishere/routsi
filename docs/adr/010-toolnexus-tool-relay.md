@@ -1,6 +1,6 @@
 # ADR-010: Client-declared tool relay through the toolnexus translator
 
-- **Status:** Proposed — **mechanism settled, unblocks when toolnexus ships F1-a/F2-a in the Go port** (upstream ADR-0010 Accepted; see spike 004). Relay is a *use of the §10 suspend/resume primitive*, not a new translator path — the Decision below is amended accordingly.
+- **Status:** Proposed — tracked as routsi issue #1 (with a documented route-around; not release-blocking) — **mechanism settled, unblocks when toolnexus ships F1-a/F2-a in the Go port** (upstream ADR-0010 Accepted; see spike 004). Relay is a *use of the §10 suspend/resume primitive*, not a new translator path — the Decision below is amended accordingly.
 - **Date:** 2026-07-29
 - **Deciders:** owner + routsi
 
