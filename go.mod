@@ -3,7 +3,7 @@ module github.com/muthuishere/routsi
 go 1.26.3
 
 require (
-	github.com/muthuishere/toolnexus/golang v0.10.0
+	github.com/muthuishere/toolnexus/golang v0.12.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
