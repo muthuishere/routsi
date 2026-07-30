@@ -50,31 +50,58 @@ func (t *Toolnexus) init(ctx context.Context) error {
 	return t.err
 }
 
-// CompleteResult implements backend.ResultBackend so the translator can refuse
-// `tools` explicitly instead of dropping them. It cannot yet RELAY a
-// client-declared tool: the library's adapters translate declarations only, so
-// there is no way to hand a provider's tool_use back as OpenAI tool_calls
-// without executing something proxy-side (ADR-010). Failing loudly beats
-// leaving a client waiting for tool_calls that can never arrive.
+// CompleteResult implements backend.ResultBackend. When the request carries
+// `tools` it relays them through toolnexus's single-turn translation (ADR-010):
+// exactly ONE provider call, no tool execution, no agent loop, and the model's
+// tool calls come back in OpenAI shape for the CLIENT to execute. That is the
+// whole pass-through contract — each HTTP turn is self-contained because the
+// client resends its history (including prior tool results) every time, so this
+// path stays stateless.
 func (t *Toolnexus) CompleteResult(ctx context.Context, req *api.ChatRequest) (api.Result, error) {
-	if len(req.Tools) > 0 {
-		return api.Result{}, fmt.Errorf(
-			"%w: %q is a translated (%s) upstream — routsi cannot relay tool calls through the translator yet. "+
-				"Route tool-calling traffic at an OpenAI-compatible forward model (e.g. the same provider via OpenRouter, `type: forward`), "+
-				"a CLI-agent model (devin/codex/claude/copilot), or a pull-worker queue — all three support tools today",
-			ErrToolsUnsupported, t.model.Name, t.model.Style)
+	if len(req.Tools) == 0 {
+		text, err := t.Complete(ctx, req)
+		return api.Result{Content: text}, err
 	}
-	text, err := t.Complete(ctx, req)
-	return api.Result{Content: text}, err
+	if err := t.init(ctx); err != nil {
+		return api.Result{}, fmt.Errorf("toolnexus %s: %w", t.model.Name, err)
+	}
+	var tools []any
+	if err := json.Unmarshal(req.Tools, &tools); err != nil {
+		return api.Result{}, fmt.Errorf("toolnexus %s: tools: %w", t.model.Name, err)
+	}
+	messages := make([]any, 0, len(req.Messages))
+	for _, m := range req.Messages {
+		messages = append(messages, historyEntry(m))
+	}
+	tr := toolnexus.TranslateRequest{Messages: messages, Tools: tools}
+	if len(req.ToolChoice) > 0 {
+		var tc any
+		if json.Unmarshal(req.ToolChoice, &tc) == nil {
+			tr.ToolChoice = tc
+		}
+	}
+	res, err := t.c.Translate(ctx, tr)
+	if err != nil {
+		return api.Result{}, fmt.Errorf("toolnexus %s: %w", t.model.Name, err)
+	}
+	out := api.Result{Content: res.Text}
+	for _, c := range res.ToolCalls {
+		out.ToolCalls = append(out.ToolCalls, api.ToolCall{
+			ID:       c.ID,
+			Type:     "function",
+			Function: api.ToolFunction{Name: c.Name, Arguments: c.Arguments},
+		})
+	}
+	return out, nil
 }
 
 func (t *Toolnexus) Complete(ctx context.Context, req *api.ChatRequest) (string, error) {
 	if len(req.Tools) > 0 {
-		// Reached only via the plain Backend path (e.g. Stream); keep the same
-		// contract as CompleteResult rather than silently dropping tools.
-		if _, err := t.CompleteResult(ctx, req); err != nil {
-			return "", err
-		}
+		// Streaming/plain-Backend path: a tool-calling turn has no text to
+		// stream, so resolve it through the structured path and hand back the
+		// text (the server prefers CompleteResult and gets the calls).
+		res, err := t.CompleteResult(ctx, req)
+		return res.Content, err
 	}
 	if err := t.init(ctx); err != nil {
 		return "", fmt.Errorf("toolnexus %s: %w", t.model.Name, err)

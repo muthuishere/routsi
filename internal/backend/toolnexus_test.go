@@ -1,14 +1,13 @@
 package backend
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/muthuishere/routsi/internal/api"
-	"github.com/muthuishere/routsi/internal/config"
 )
 
 // A tool-calling conversation must survive the trip into toolnexus history:
@@ -85,33 +84,16 @@ func TestSplitCarriesToolTurns(t *testing.T) {
 	}
 }
 
-// A translated upstream cannot relay tool calls yet (ADR-010). It must say so
-// rather than drop `tools` and leave the client waiting for tool_calls that
-// can never arrive.
-func TestToolnexusRefusesToolsExplicitly(t *testing.T) {
-	tn := NewToolnexus(&config.Model{Name: "claude-native", Style: config.StyleAnthropic})
-	req := &api.ChatRequest{
-		Model:    "claude-native",
-		Messages: []api.Message{{Role: "user", Content: json.RawMessage(`"hi"`)}},
-		Tools:    json.RawMessage(`[{"type":"function","function":{"name":"w"}}]`),
+// ErrToolsUnsupported stays part of the backend contract for any backend that
+// genuinely cannot honour tools — the translator no longer needs it (ADR-010
+// relays through single-turn Translate), but silently dropping tools must never
+// become acceptable again, so the sentinel and its 400 mapping remain.
+func TestToolsUnsupportedSentinelIsWrappable(t *testing.T) {
+	err := fmt.Errorf("%w: model %q is text-only", ErrToolsUnsupported, "some-model")
+	if !errors.Is(err, ErrToolsUnsupported) {
+		t.Fatal("sentinel must survive %w wrapping so the server can map it to 400")
 	}
-
-	if _, err := tn.CompleteResult(context.Background(), req); !errors.Is(err, ErrToolsUnsupported) {
-		t.Fatalf("CompleteResult err = %v, want ErrToolsUnsupported", err)
-	} else {
-		for _, want := range []string{"claude-native", "forward", "pull-worker"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error should point the user at an alternative (%q missing): %v", want, err)
-			}
-		}
-	}
-	if _, err := tn.Complete(context.Background(), req); !errors.Is(err, ErrToolsUnsupported) {
-		t.Fatalf("Complete err = %v, want ErrToolsUnsupported", err)
-	}
-
-	// Without tools the guard must not fire (it would break every normal request).
-	req.Tools = nil
-	if _, err := tn.CompleteResult(context.Background(), req); errors.Is(err, ErrToolsUnsupported) {
-		t.Fatal("guard fired on a request carrying no tools")
+	if !strings.Contains(err.Error(), "some-model") {
+		t.Fatal("wrapped message should keep the caller context")
 	}
 }
