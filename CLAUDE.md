@@ -222,6 +222,39 @@ project root, avoid symlinked cwds; session db at
 auth.json separate). Next: promote the driver into `routsi worker` / the
 routsi-worker skill (ADR-005 extension).
 
+## 2026-07-30 — ADR-010 REFRAMED AGAIN: Mode A wants a single-turn translate, not relay
+
+Peer review from the toolnexus desk (they read internal/backend/toolnexus.go) killed our
+plan and it was right: **do NOT build a parking trampoline.** routsi's own file comment
+says the OpenAI client resends full history each request and we pass req.Messages as
+history verbatim — the pass-through path is ALREADY STATELESS, so parking a goroutine
+implements a stateless need with stateful machinery (live goroutine per conversation,
+TTL, restart-fragile, single-instance) and invents the abandoned-conversation poisoning
+we feared. **Split the two modes:** Mode A (no conversation_id, client resends history +
+tool results) needs ONE model call + three translations, no loop at all; Mode B (explicit
+conversation_id, proxy owns memory) is the only place relay + durable resume is correct.
+Of the three translations toolnexus ships only (a) declarations (adapters.go:41,57,70) —
+(b) OpenAI messages incl. tool-role results → provider tool_result blocks and (c)
+provider tool_use → OpenAI tool_calls are both MISSING (SPEC §0 item 7 pins adapters as
+schema-only). Asked upstream to spec a single-turn `Translate` — owner-conditioned on it
+being generally useful, with "reject as too narrow" a live option; if declined routsi
+owns the translation. Measured facts from their tests: 3 relay calls in one turn DO give 3
+concurrent WaitFor callbacks (F2-a not needed in-process); parking is supported ONLY with
+TimeoutMs unset (with a deadline the park completes then the run dies at the next LLM
+call); ConversationStore has NO Delete, so an abandoned Mode-B conversation wedges an
+unbalanced transcript (delete our transcript rather than resume). Also rejected a working
+hack (AfterLLM exposes the raw provider payload; a hook returning an error aborts the run
+⇒ one call, zero upstream change) — abuses an error path for control flow.
+**Their stale premise, corrected:** they thought ADR-008 blocked everything; it shipped
+first (681863d), so (b)+(c) are immediately usable.
+
+**FIXED (ours, 2026-07-30):** `split()` fidelity bug they caught — history entries were
+`{role, content: m.Text()}`, so a tool result lost `tool_call_id` and an assistant turn
+lost `tool_calls` entirely; multi-turn tool use could not work regardless of upstream. Now
+`historyEntry()` carries tool_calls/tool_call_id/name through in OpenAI shape (correct for
+`style: openai` today; Anthropic/Gemini await (b)). Strictly additive — a message with no
+tool fields renders byte-identically. Tests in internal/backend/toolnexus_test.go.
+
 ## 2026-07-30 — ADR-010 mechanism SETTLED (peer desk); routsi-desk on the hub
 
 toolnexus#37 answered by the **toolnexus desk** (a peer agent registered on the messenger

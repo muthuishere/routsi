@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -86,6 +87,34 @@ func (t *Toolnexus) Stream(ctx context.Context, req *api.ChatRequest, emit func(
 
 // split turns OpenAI messages into (last user prompt, prior history) in the
 // role/content map shape RunWithHistory appends to verbatim.
+// historyEntry renders one message for toolnexus's history. It preserves the
+// tool-calling fields the OpenAI wire carries: without them a `tool` result
+// loses its tool_call_id and an assistant turn loses its tool_calls entirely,
+// so a provider can never match a result to its call and multi-turn tool use
+// cannot work (ADR-010). Strictly additive — a message with no tool fields
+// renders exactly as before.
+//
+// This carries the fields through in OpenAI shape, which is correct for
+// `style: openai` upstreams. Translating them into provider-native tool_use /
+// tool_result blocks for Anthropic/Gemini is a gap in the toolnexus library
+// (its adapters are declaration-only); see ADR-010.
+func historyEntry(m api.Message) map[string]any {
+	e := map[string]any{"role": m.Role, "content": m.Text()}
+	if len(m.ToolCalls) > 0 {
+		var calls any
+		if json.Unmarshal(m.ToolCalls, &calls) == nil {
+			e["tool_calls"] = calls
+		}
+	}
+	if m.ToolCallID != "" {
+		e["tool_call_id"] = m.ToolCallID
+	}
+	if m.Name != "" {
+		e["name"] = m.Name
+	}
+	return e
+}
+
 func split(req *api.ChatRequest) (string, []any) {
 	last := -1
 	for i := len(req.Messages) - 1; i >= 0; i-- {
@@ -99,7 +128,7 @@ func split(req *api.ChatRequest) (string, []any) {
 		if i == last {
 			continue
 		}
-		history = append(history, map[string]any{"role": m.Role, "content": m.Text()})
+		history = append(history, historyEntry(m))
 	}
 	if last < 0 {
 		return "", history
