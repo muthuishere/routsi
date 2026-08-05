@@ -54,6 +54,14 @@ type Server struct {
 	dynamic map[string]*target // queue name -> target, added on worker register
 }
 
+// deprecatedCLIType warns once per model that a built-in agent type is on its
+// way out (ADR-014). It still works; the replacement is an adapter script.
+func deprecatedCLIType(m *config.Model) {
+	log.Printf("config: model %q uses deprecated type %q — move it to `type: command` "+
+		"(see examples/adapters/) or reach it via an OpenAI-compatible bridge; ADR-014",
+		m.Name, m.Type)
+}
+
 func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, error) {
 	if reg == nil {
 		reg = backend.NewRegistry()
@@ -73,6 +81,8 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 		broker:   queue.NewWithConfig(cfg.Workers.Freshness, cfg.Workers.MaxWait),
 		dynamic:  map[string]*target{},
 	}
+	// One pooled client for every forward upstream (config.HTTPConfig).
+	httpClient := backend.NewHTTPClient(cfg.HTTP)
 	for i := range cfg.Models {
 		m := &cfg.Models[i]
 		if m.Type == config.TypeDynamic {
@@ -81,15 +91,19 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 		t := &target{model: m}
 		switch {
 		case m.Type == config.TypeForward && m.Style == config.StyleOpenAI:
-			t.forward = backend.NewForward(m)
+			t.forward = backend.NewForward(m, httpClient, cfg.HTTP)
 			// Companion for proxy-managed conversations (explicit id).
 			t.backend = backend.NewToolnexus(m)
 		case m.Type == config.TypeForward:
 			t.backend = backend.NewToolnexus(m)
 		case m.Type == config.TypeDevin:
+			deprecatedCLIType(m)
 			t.backend = backend.NewDevin(m)
 		case m.Type == config.TypeCodex || m.Type == config.TypeCopilot || m.Type == config.TypeClaude:
+			deprecatedCLIType(m)
 			t.backend = backend.NewCLIAgent(m)
+		case m.Type == config.TypeCommand:
+			t.backend = backend.NewCommand(m)
 		case m.Type == config.TypeQueue:
 			// Config-declared queue reserves the name; a worker supplies
 			// answers at runtime via the broker.
@@ -396,47 +410,17 @@ func (s *Server) workerPoll(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) workerAnswer(w http.ResponseWriter, r *http.Request) {
 	name, id := r.PathValue("name"), r.PathValue("id")
-	var body struct {
-		Content   string `json:"content"`
-		ToolCalls []struct {
-			ID       string `json:"id"`
-			Type     string `json:"type"`
-			Function *struct {
-				Name      string `json:"name"`
-				Arguments string `json:"arguments"`
-			} `json:"function"`
-			// simplified worker shape: {"name":..., "arguments":{...}}
-			Name      string          `json:"name"`
-			Arguments json.RawMessage `json:"arguments"`
-		} `json:"tool_calls"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 20<<20)).Decode(&body); err != nil {
-		httpError(w, http.StatusBadRequest, "answer: JSON body {\"content\":\"...\"} required")
+	// Shared with the exec adapter (api.ParseAnswer) so every transport of the
+	// adapter contract normalizes tool calls identically (ADR-013).
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 20<<20))
+	if err != nil {
+		httpError(w, http.StatusBadRequest, "answer: could not read body")
 		return
 	}
-	res := api.Result{Content: body.Content}
-	for i, tc := range body.ToolCalls {
-		call := api.ToolCall{ID: tc.ID, Type: tc.Type}
-		if call.Type == "" {
-			call.Type = "function"
-		}
-		if call.ID == "" {
-			call.ID = fmt.Sprintf("call_%s_%d", id, i)
-		}
-		if tc.Function != nil {
-			call.Function = api.ToolFunction{Name: tc.Function.Name, Arguments: tc.Function.Arguments}
-		} else {
-			args := string(tc.Arguments)
-			var asStr string
-			if json.Unmarshal(tc.Arguments, &asStr) == nil {
-				args = asStr // worker sent arguments as a JSON-encoded string already
-			}
-			if args == "" {
-				args = "{}"
-			}
-			call.Function = api.ToolFunction{Name: tc.Name, Arguments: args}
-		}
-		res.ToolCalls = append(res.ToolCalls, call)
+	res, err := api.DecodeAnswer(raw, id)
+	if err != nil {
+		httpError(w, http.StatusBadRequest, "answer: JSON body {\"content\":\"...\"} required")
+		return
 	}
 	if err := s.broker.Answer(name, id, res); err != nil {
 		httpError(w, http.StatusConflict, "answer: %v", err)

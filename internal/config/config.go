@@ -22,7 +22,17 @@ const (
 	TypeCopilot ModelType = "copilot"
 	TypeClaude  ModelType = "claude"
 	TypeDynamic ModelType = "dynamic"
-	TypeQueue   ModelType = "queue" // pull-worker queue (ADR-001)
+	TypeQueue   ModelType = "queue"   // pull-worker queue (ADR-001)
+	TypeCommand ModelType = "command" // exec adapter (ADR-013)
+)
+
+// ToolMode is how an adapter handles a request's `tools` (ADR-013).
+type ToolMode string
+
+const (
+	ToolsNative   ToolMode = "native"   // tools passed through; adapter returns tool_calls
+	ToolsEmulated ToolMode = "emulated" // routsi renders the fenced-JSON manifest (ADR-011 Phase A)
+	ToolsOff      ToolMode = "off"      // tools present => ErrToolsUnsupported => 400
 )
 
 // CLIAgent reports whether the type shells out to a local agent CLI.
@@ -86,6 +96,13 @@ type Model struct {
 	// membership is checked at server start, after discovery).
 	Levels map[string]string `yaml:"levels"`
 
+	// exec-adapter fields (type: command, ADR-013). Command is a shell string
+	// run via `sh -c`; the job goes to its stdin, the answer comes off stdout.
+	// Workdir is shared with the CLI-agent types below.
+	Command  string        `yaml:"command"`
+	Timeout  time.Duration `yaml:"timeout"` // per-request cap (default 5m)
+	ToolMode ToolMode      `yaml:"tools"`   // native (default) | emulated | off
+
 	// CLI-agent fields, shared by devin/codex/copilot (UpstreamModel doubles
 	// as the agent's --model / -m flag).
 	DevinBin       string   `yaml:"bin"`             // binary override; default = type name from PATH
@@ -104,6 +121,7 @@ type Config struct {
 	TLS       TLSConfig         `yaml:"tls"`
 	Workers   WorkersConfig     `yaml:"workers"`
 	Decider   DeciderConfig     `yaml:"decider"`
+	HTTP      HTTPConfig        `yaml:"http"`
 
 	// StreamHeartbeat is how often the streaming envelope path writes an SSE
 	// comment (": ping\n\n") while a buffered backend is silently working, so
@@ -120,6 +138,68 @@ type WorkersConfig struct {
 	Auth      map[string]any `yaml:"auth"`      // reserved — no worker auth in v1
 	Freshness time.Duration  `yaml:"freshness"` // a worker is "present" if it polled within this (default 30s)
 	MaxWait   time.Duration  `yaml:"max_wait"`  // cap on how long a request blocks for a worker (default 5m)
+}
+
+// HTTPConfig tunes the outbound connection pool that forward upstreams share.
+// Every field is optional: zero means "use the safe default" (Defaults()), so
+// an omitted `http:` block behaves well without the operator knowing this
+// block exists — but nothing here is fixed by the binary.
+//
+// The pool sizes matter more than they look. Go's http.DefaultTransport keeps
+// only 2 idle connections per host, so past two concurrent calls to the same
+// upstream every request opened and discarded a fresh TCP connection. Measured
+// against a local mock at c=50/n=100k, that cost p99 605ms while p50 stayed
+// ~1ms — a pure tail-latency defect, invisible in light testing. Upstreams are
+// few and long-lived, so the default pools generously.
+type HTTPConfig struct {
+	Timeout               time.Duration `yaml:"timeout"`                 // whole-request cap (default 5m — streams are long)
+	MaxIdleConns          int           `yaml:"max_idle_conns"`          // default 512
+	MaxIdleConnsPerHost   int           `yaml:"max_idle_conns_per_host"` // default 256
+	IdleConnTimeout       time.Duration `yaml:"idle_conn_timeout"`       // default 90s
+	TLSHandshakeTimeout   time.Duration `yaml:"tls_handshake_timeout"`   // default 10s
+	ExpectContinueTimeout time.Duration `yaml:"expect_continue_timeout"` // default 1s
+	DisableHTTP2          bool          `yaml:"disable_http2"`           // default false (HTTP/2 attempted)
+	DisableCompression    bool          `yaml:"disable_compression"`     // default false
+	Retries               *int          `yaml:"retries"`                 // before-first-byte retries; default 2, 0 disables
+}
+
+// Defaults returns h with every unset field filled in. Explicit zeros that are
+// meaningful (retries: 0) are preserved via the pointer field.
+func (h HTTPConfig) Defaults() HTTPConfig {
+	if h.Timeout <= 0 {
+		h.Timeout = 5 * time.Minute
+	}
+	if h.MaxIdleConns <= 0 {
+		h.MaxIdleConns = 512
+	}
+	if h.MaxIdleConnsPerHost <= 0 {
+		h.MaxIdleConnsPerHost = 256
+	}
+	if h.IdleConnTimeout <= 0 {
+		h.IdleConnTimeout = 90 * time.Second
+	}
+	if h.TLSHandshakeTimeout <= 0 {
+		h.TLSHandshakeTimeout = 10 * time.Second
+	}
+	if h.ExpectContinueTimeout <= 0 {
+		h.ExpectContinueTimeout = time.Second
+	}
+	if h.Retries == nil {
+		n := 2
+		h.Retries = &n
+	}
+	return h
+}
+
+// RetryCount is the resolved before-first-byte retry count.
+func (h HTTPConfig) RetryCount() int {
+	if h.Retries == nil {
+		return 2
+	}
+	if *h.Retries < 0 {
+		return 0
+	}
+	return *h.Retries
 }
 
 // DeciderConfig points `auto` routing at an external, user-writable decider
@@ -180,6 +260,7 @@ func Parse(b []byte) (*Config, error) {
 	if cfg.Decider.Command != "" && cfg.Decider.Timeout == 0 {
 		cfg.Decider.Timeout = 3 * time.Second
 	}
+	cfg.HTTP = cfg.HTTP.Defaults()
 	return cfg, nil
 }
 
@@ -284,6 +365,25 @@ func (c *Config) validate() error {
 		case TypeQueue:
 			// A config-declared queue only reserves a name; a worker supplies
 			// the answers at runtime. Nothing else to validate.
+		case TypeCommand:
+			if m.Command == "" {
+				return fmt.Errorf("config: command model %q needs command", m.Name)
+			}
+			switch m.ToolMode {
+			case "":
+				m.ToolMode = ToolsNative
+			case ToolsNative, ToolsEmulated, ToolsOff:
+			default:
+				return fmt.Errorf("config: command model %q: unknown tools %q (native|emulated|off)", m.Name, m.ToolMode)
+			}
+			if m.Timeout <= 0 {
+				m.Timeout = 5 * time.Minute
+			}
+			if m.Workdir != "" {
+				if st, err := os.Stat(m.Workdir); err != nil || !st.IsDir() {
+					return fmt.Errorf("config: command model %q: workdir %q is not a directory", m.Name, m.Workdir)
+				}
+			}
 		case TypeDynamic:
 			if len(m.Levels) == 0 {
 				return fmt.Errorf("config: dynamic model %q needs levels", m.Name)

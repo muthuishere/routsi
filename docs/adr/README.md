@@ -37,3 +37,20 @@ backend (translator, CLI agents, workers, memory) drops them at the string-only
 | [010](010-toolnexus-tool-relay.md) | Toolnexus client-declared tool relay | Proposed | [004](../spikes/004-toolnexus-tool-relay.md) (partial) |
 | [011](011-cli-agent-tool-calling.md) | CLI-agent tool calling (emulation → MCP trampoline) | Proposed | [002](../spikes/002-cli-tool-emulation.md) ✅ live-proven · [003](../spikes/003-mcp-trampoline.md) planned |
 | [012](012-pull-worker-tools.md) | Tools through the pull-worker queue | Proposed | [005](../spikes/005-worker-tools.md) planned |
+
+## Adapter track (2026-08-05): vendor code out of core
+
+Competitive review (benchmarked on this machine) found ccproxy-api already does
+CLI-agent-as-a-model better than routsi's `-p` one-shots — native tool calling, MCP,
+real permissions — while nothing in the field does routsi's *inbound* direction (a
+backend with no URL: a live session, a TUI, a human). These two ADRs move vendor-specific
+code out of the binary so the inbound direction is what routsi invests in.
+
+| ADR | Title | Status | Notes |
+|-----|-------|--------|-------|
+| [013](013-adapter-contract.md) | Adapter contract: one schema, three transports | **Accepted** | ✅ exec (`type: command`) shipped; socket specified; queue already live |
+| [014](014-deprecate-builtin-cli-agents.md) | Deprecate built-in CLI-agent types | **Accepted** | ⚠️ devin/codex/copilot/claude warn at startup; removal is a later owner call |
+
+WASM adapters were considered and rejected with the reason recorded in 013: **WASI cannot
+spawn a process**, and spawning is the entire job. WASM remains a candidate for the
+*decider* (pure function, per request), not for adapters.

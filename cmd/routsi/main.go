@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/muthuishere/routsi/internal/adapters"
 	"github.com/muthuishere/routsi/internal/backend"
 	"github.com/muthuishere/routsi/internal/config"
 	"github.com/muthuishere/routsi/internal/discovery"
@@ -73,6 +74,7 @@ usage:
   routsi [serve] [-config path] [-listen addr] [-port n] [-env file]   run the server (default)
   routsi install  [-config path]  install as a keep-alive background service
   routsi install  --skills        install the agent skill(s) into ~/.claude, ~/.codex
+  routsi install  --adapters      install adapter templates into ~/.config/routsi/adapters
   routsi worker   run  --proxy URL --queue NAME --agent 'cmd'   run a pull-worker
   routsi worker   scaffold        print an editable curl worker script
   routsi worker   register --proxy URL --queue NAME             one-shot register
@@ -198,6 +200,14 @@ func serve() {
 	if err := discovery.Populate(context.Background(), cfg); err != nil {
 		log.Printf("warning: %v", err) // per-model, non-fatal
 	}
+	// Lay down the default adapter templates so `$ROUTSI_ADAPTERS/cli.js`
+	// resolves out of the box. Existing files are never overwritten, and
+	// nothing runs until a models.yaml entry names it (ADR-013).
+	if wrote, aerr := adapters.Ensure(); aerr != nil {
+		log.Printf("warning: adapters: %v", aerr) // non-fatal: templates only
+	} else if len(wrote) > 0 {
+		log.Printf("adapters: installed %d template(s) into %s", len(wrote), adapters.Dir())
+	}
 	// Custom handlers are registered here when embedding routsi as a library;
 	// the stock binary ships with none.
 	reg := backend.NewRegistry()
@@ -272,12 +282,18 @@ Clients authenticate with it as their OpenAI api_key
 func manage(action string) {
 	cfgPath := flag.String("config", "", "path to models.yaml")
 	skills := flag.Bool("skills", false, "install the agent skill(s) into global skill dirs")
+	adaptersFlag := flag.Bool("adapters", false, "install the default adapter templates into ~/.config/routsi/adapters")
+	force := flag.Bool("force", false, "with --adapters: overwrite local edits with the shipped templates")
 	flag.Parse()
 
 	switch action {
 	case "install":
 		if *skills {
 			installSkills()
+			return
+		}
+		if *adaptersFlag {
+			installAdapters(*force)
 			return
 		}
 		bin, err := os.Executable()

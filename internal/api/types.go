@@ -191,6 +191,10 @@ func NewChunk(id, model, delta string, done bool) ChatResponse {
 // ChunkID mints an id shared by all chunks of one streamed completion.
 func ChunkID() string { return "chatcmpl-" + randID() }
 
+// NewID mints a bare random id, for callers that supply their own prefix
+// (adapter job ids, synthesized tool-call ids).
+func NewID() string { return randID() }
+
 func randID() string {
 	b := make([]byte, 12)
 	_, _ = rand.Read(b)

@@ -25,8 +25,37 @@ type Forward struct {
 	Retries int
 }
 
-func NewForward(m *config.Model) *Forward {
-	return &Forward{Model: m, Client: &http.Client{Timeout: 5 * time.Minute}, Retries: 2}
+// NewHTTPClient builds the outbound client forwards share, from operator
+// config. One client (and so one connection pool) serves every upstream, which
+// is what makes the idle-connection budget meaningful — a per-model pool would
+// re-open connections for every model pointing at the same host.
+//
+// Callers own the result: nothing here is package-level state, so a test or an
+// embedder can hand in its own client instead.
+func NewHTTPClient(h config.HTTPConfig) *http.Client {
+	h = h.Defaults()
+	return &http.Client{
+		Timeout: h.Timeout,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConns:          h.MaxIdleConns,
+			MaxIdleConnsPerHost:   h.MaxIdleConnsPerHost,
+			IdleConnTimeout:       h.IdleConnTimeout,
+			TLSHandshakeTimeout:   h.TLSHandshakeTimeout,
+			ExpectContinueTimeout: h.ExpectContinueTimeout,
+			ForceAttemptHTTP2:     !h.DisableHTTP2,
+			DisableCompression:    h.DisableCompression,
+		},
+	}
+}
+
+// NewForward builds a forward backend against a shared client. Pass the client
+// from NewHTTPClient once per process; retries come from the same config block.
+func NewForward(m *config.Model, client *http.Client, h config.HTTPConfig) *Forward {
+	if client == nil {
+		client = NewHTTPClient(h)
+	}
+	return &Forward{Model: m, Client: client, Retries: h.RetryCount()}
 }
 
 // rewriteBody swaps the model field and drops proxy-only fields, preserving

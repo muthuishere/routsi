@@ -7,6 +7,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/muthuishere/routsi/internal/adapters"
 )
 
 // Embedded agent skill(s), shipped in the binary so `routsi install --skills`
@@ -104,3 +107,38 @@ func worker() {
 	}
 }
 
+// installAdapters lays the shipped adapter templates down in the config dir.
+// Without --force an edited file is kept: the templates are a starting point
+// the user owns, not routsi code they must not touch (ADR-013).
+func installAdapters(force bool) {
+	dir := adapters.Dir()
+	if dir == "" {
+		fmt.Println("cannot resolve a config dir (no home directory). Nothing installed.")
+		return
+	}
+	var (
+		wrote []string
+		err   error
+	)
+	if force {
+		wrote, err = adapters.Reset()
+	} else {
+		wrote, err = adapters.Ensure()
+	}
+	if err != nil {
+		log.Fatalf("install --adapters: %v", err)
+	}
+	if len(wrote) == 0 {
+		fmt.Printf("adapter templates already present in %s (use --force to restore the shipped versions)\n", dir)
+	} else {
+		for _, w := range wrote {
+			fmt.Println("installed", w)
+		}
+	}
+	fmt.Printf("\nReference one from models.yaml — $ROUTSI_ADAPTERS expands to %s:\n\n", dir)
+	fmt.Println(`  - name: claude-adapter`)
+	fmt.Println(`    type: command`)
+	fmt.Println(`    command: ADAPTER_CLI=claude node $ROUTSI_ADAPTERS/cli.js`)
+	fmt.Println(`    tools: emulated`)
+	fmt.Printf("\nShipped templates: %s\n", strings.Join(adapters.Names(), ", "))
+}

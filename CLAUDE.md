@@ -418,3 +418,111 @@ upstream bytes, lower risk; not rearchitected. Also added
 auto routing, concrete bypass, streaming+heartbeat, pull-worker) as executable
 examples backing a future docs "Scenarios" page. `go vet ./...` + `go test
 ./...` green.
+
+## 2026-08-05 — competitive review, HTTP pool fix, adapter contract (ADR-013/014)
+
+**Benchmarked, not read.** Built LiteLLM's Rust gateway from source
+(`LiteLLM-Labs/litellm-rust`) + ran LiteLLM Python, all against one Go mock on this
+machine (harness in scratchpad, not yet in-repo). Added latency over direct, serial:
+routsi +0.050ms p50 / +0.119ms p99 · litellm-RUST +0.036/+0.049 · litellm-PY
++1.488/+2.153. Concurrent c=50: routsi 26,042 rps (p99 4.70ms, 31.5MB) ·
+litellm-RUST 54,569 (2.14ms, 31.5MB) · litellm-PY 709 (128ms, 305MB). Findings:
+their Rust gateway is REAL and ~2x faster than routsi, **but has no
+`/v1/chat/completions` route at all** (only `/v1/messages` + `/v1/responses`; POST to
+chat/completions = 405) and was doing passthrough while routsi parsed/rewrote/routed.
+Their Rust is 0.69% of the repo and marked beta — marketing runs ahead of code, but the
+code that exists is fast. Their *published* Python numbers check out (257.7ms p99 /
+329.5MB claimed vs 127.6ms / 305MB measured). Conclusion: **perf is settled ground for
+everyone — do not pitch it.** routsi is fine (6x better than their own published Rust
+headline; 37x vs the Python everyone actually self-hosts).
+
+**Real bug the benchmark found:** `internal/backend/forward.go` built its client as
+`&http.Client{Timeout:...}` ⇒ `http.DefaultTransport` ⇒ **MaxIdleConnsPerHost=2**, so past
+2 concurrent calls per upstream every request opened+discarded a TCP connection. p99 605ms
+at 4,586 rps with a healthy 1ms median (invisible in light testing). Fixed → **p99 4.26ms,
+29,051 rps**. Per owner rule (*"nothing static — safe defaults and configurable"*): new
+`config.HTTPConfig` (`http:` block — timeout, max_idle_conns, max_idle_conns_per_host,
+idle_conn_timeout, tls_handshake_timeout, expect_continue_timeout, disable_http2,
+disable_compression, retries), `Defaults()` fills only unset fields, `retries` is a
+pointer so explicit 0 survives, `backend.NewHTTPClient(cfg.HTTP)` built once in
+`server.New` and passed to `NewForward(m, client, cfg.HTTP)`. No package-level state.
+Tests: `internal/config/http_test.go`.
+
+**Positioning call (owner):** stop competing on routing (LiteLLM auto-routing = tiers +
+classifier + Thompson sampling + session affinity), on cascades (Maestro/Not
+Diamond/FrugalGPT), and on subscription-as-API (ccproxy). The unclaimed ground is
+**inbound: a backend with no URL**. Vendor CLI code leaves core.
+
+**ADR-013 Accepted + SHIPPED (exec transport):** one adapter contract, three transports —
+exec (`type: command`), socket (`type: adapter`, specified only), queue (already live;
+socket and queue are the same idea with polarity flipped). Job on stdin is
+field-compatible with `queue.Job` plus `prompt`/`upstream_model`/`stream`; answer on
+stdout is `{content, tool_calls}` in OpenAI **or** simplified shape, and any non-JSON
+stdout is the answer text (so `echo hi` is a valid adapter). Env convenience:
+ROUTSI_MODEL / UPSTREAM_MODEL / CONVERSATION_ID / JOB_ID / STREAM. `tools:
+native|emulated|off` (emulated folds the ADR-011 fenced manifest into the prompt; off ⇒
+ErrToolsUnsupported ⇒ 400, never a silent drop). New: `internal/backend/command.go`,
+`internal/api/answer.go` (`ParseAnswer`/`DecodeAnswer` — the worker HTTP endpoint now uses
+the same normalizer, so all transports agree), `config.TypeCommand` + `ToolMode`.
+Examples: `examples/adapters/{cli.js,echo-tools.js,README.md}`. Live-verified through the
+real server: shell one-liner adapter, JS adapter, tool_call out (`finish_reason:
+tool_calls`), tool-result round trip, SSE streaming, `tools: off` ⇒ 400.
+**WASM rejected with the reason recorded: WASI cannot spawn a process, and spawning is the
+job.** (Still a candidate for the decider.)
+
+**ADR-014 Accepted:** deprecate `type: devin|codex|copilot|claude` — they warn at startup
+(`deprecatedCLIType`) and are re-expressed as `examples/adapters/cli.js`
+(`ADAPTER_CLI=claude|codex|copilot|devin|openclaw`). Removal is a later owner call; gating
+item is devin's per-conversation session mapping, which a stateless adapter cannot yet
+reproduce. `toolemu.go` survives as the `tools: emulated` mode. Documented route for
+subscription-backed Claude/Codex/Copilot: `type: forward` → ccproxy-api.
+
+**Templates shipped, core stays clean (spike 007, live):** adapter templates are embedded
+in the binary (`internal/adapters`, `//go:embed all:templates`) and laid down in
+**`~/.config/routsi/adapters`** on first `serve` — also `routsi install --adapters`
+(`--force` restores). Bootstrap-and-never-clobber, same contract as known-models.json;
+verified a user edit survives restart. `$ROUTSI_ADAPTERS` is exported into every adapter's
+environment so models.yaml stays portable: `command: ADAPTER_CLI=claude node
+$ROUTSI_ADAPTERS/cli.js`. Tests in `internal/adapters/adapters_test.go`.
+
+**Spike 007 results (real agents, out-of-core):** claude ✅ 7.5s · codex ✅ 14s · copilot ✅
+29s — all three argument-exact `get_weather` tool calls with `finish_reason: tool_calls`,
+identical wire output to the Go backends, zero vendor code in the binary. devin ❌ blocked
+by its OWN service ("high demand for this model") — reproduced identically outside routsi,
+not an adapter bug. **Undocumented gotcha found and encoded:** agents disagree on how the
+prompt arrives — claude/codex take **stdin**; devin takes **`--prompt-file`** (its `-p` is
+the non-interactive SWITCH, not the prompt — reading `devin --help` closely is what fixed
+it), which also dodges spike 006's ~80KB argv ceiling and all quoting hazards; copilot has
+no file option (`-p <text>` only) so it stays on **argv** and is the one agent still
+exposed to that ceiling. devin *panics* (`repl_mode.rs:478 unwrap on None`) on an unread
+open stdin, so every non-stdin mode closes the child's stdin. Now a per-agent
+`prompt: "stdin"|"file"|"argv"` (+ `promptFlag`) field in cli.js, temp file cleaned up on
+exit. devin on --prompt-file now reaches the agent (fails with its SERVICE error, not a
+usage error/panic). Only capability not yet reproduced out-of-core: **devin session
+mapping** (`devin -r`), which gates actually deleting the built-in types.
+
+Still open: `routsi token|cert` utility (mint bearer tokens, self-signed + mTLS certs,
+auto-generate on first serve); socket transport; benchmark harness into the repo as
+`benchmark/`; README/site rewrite around the adapter framing.
+
+<!-- ctx-optimize:begin -->
+<ctx-optimize>
+  <precondition>Run `command -v ctx-optimize` first. If it is NOT installed, IGNORE this entire
+  block and answer by reading the code normally — the store is an optimization, not a requirement
+  (install later with `npm install -g @muthuishere/ctx-optimize`, or download the binary). Everything
+  below applies ONLY when the command exists.</precondition>
+  <store>Pre-built knowledge store at `~/ctxoptimize/llm-forward-proxy/` (config in `.ctxoptimize/` here).</store>
+  <use>Use it INSTEAD of grep-and-read chains — PICK BY INTENT: find → `ctx-optimize query "<terms>"` ·
+  inspect a symbol → `card <symbol>` · about to EDIT → `change-plan <symbol>` (callers+impact+tests, one
+  call) · blast radius → `affected <symbol>` · connection → `path <a> <b>` ·
+  list/filter (no jq): `nodes --kind K` / `edges --relation R` / `deps`. wiki at
+  `~/ctxoptimize/llm-forward-proxy/wiki/`. Output is parsed fact with exact file:line — cite it directly, do
+  NOT re-verify in source; open a file only for a body the store didn't show. Exhaustive literal-string
+  sweeps stay grep's job.</use>
+  <deep-doc>The FULL usage card — verify discipline, store-vs-grep ladder, sources (databases/
+  buckets/queues/APIs by env-var name), remote push/pull, `up` — is committed at
+  `.ctxoptimize/instructions.md`. Read it before deeper store work.</deep-doc>
+  <no-local-store>Fresh clone with nothing at `~/ctxoptimize/llm-forward-proxy/`? Run `ctx-optimize up` —
+  it pulls the team's prebuilt store when the config declares one, otherwise rebuilds in seconds.</no-local-store>
+</ctx-optimize>
+<!-- ctx-optimize:end -->
