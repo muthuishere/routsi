@@ -49,7 +49,7 @@ routsi serve                                    # any config
 devin --permission-mode dangerous               # or: claude --dangerously-skip-permissions / codex
 
 # 3. the glue — built into the CLI (registers the queue itself):
-routsi worker join --proxy http://proxy:8080 --queue devin-live --workdir ~/devin-jobs \
+routsi worker join --proxy http://proxy:11080 --queue devin-live --workdir ~/devin-jobs \
   --notify 'tmux send-keys -t devin "Read $ROUTSI_JOB_FILE and follow its HOW TO ANSWER section." Enter'
 ```
 

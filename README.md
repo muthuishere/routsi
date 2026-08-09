@@ -6,12 +6,15 @@ agent** — API models (OpenRouter, OpenAI, DeepSeek, …) *and* local agent CLI
 stickiness, a live dashboard, and metrics. A single Go binary; point any OpenAI SDK
 at it.
 
+**New here? → [Get started](docs/getting-started.md)** — a copy-paste config with a
+cheap and a strong rung on OpenRouter (Qwen 3.7), running in five minutes.
+
 ## Quick start
 
 ```sh
 task build                       # -> bin/routsi
 cp models.yaml ~/.config/routsi/ # or keep ./models.yaml
-routsi serve                     # listens on :8080 by default
+routsi serve                     # listens on :11080 by default
 ```
 
 ### Install via npm
@@ -28,10 +31,10 @@ binary itself, so the command always works either way. See
 [`docs/adr/006-npm-distribution.md`](docs/adr/006-npm-distribution.md) for how it
 works.
 
-Point any OpenAI client at `http://localhost:8080/v1`. Then:
+Point any OpenAI client at `http://localhost:11080/v1`. Then:
 
 ```sh
-curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+curl localhost:11080/v1/chat/completions -H 'content-type: application/json' \
   -d '{"model":"auto","messages":[{"role":"user","content":"hello"}]}'
 ```
 
@@ -68,7 +71,7 @@ Agent CLIs expose their inner models as `<agent>/<model>` catalog entries — fr
 `variants:` or discovery (`GET /v1/models` lists them all). Just name one:
 
 ```sh
-curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+curl localhost:11080/v1/chat/completions -H 'content-type: application/json' \
   -H 'X-Conversation-Id: my-thread-1' \
   -d '{"model":"devin/claude-opus-4.8","messages":[{"role":"user","content":"refactor plan?"}]}'
 ```
@@ -123,7 +126,7 @@ routes to it. Credentials never leave your machine; the worker is outbound-only.
 
 ```sh
 # on the worker machine (any machine with your agent logged in):
-routsi worker run --proxy https://your-proxy:8080 --queue my-agent \
+routsi worker run --proxy https://your-proxy:11080 --queue my-agent \
   --agent 'codex exec --skip-git-repo-check -'    # reads the question on stdin, prints the answer
 ```
 
@@ -234,7 +237,7 @@ No root; everything lives under your home dir. macOS logs: `~/Library/Logs/routs
 
 ## Dashboard & metrics
 
-- **`http://localhost:8080/`** — live dashboard (requests, tokens, latency, routing
+- **`http://localhost:11080/`** — live dashboard (requests, tokens, latency, routing
   split, escalations), auto-refreshing, self-contained.
 - **`/stats`** — JSON snapshot.
 - **`/metrics`** — Prometheus text (scrape it).

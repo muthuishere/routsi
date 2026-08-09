@@ -1,6 +1,6 @@
 # routsi config. Ask for model "auto" to route; ask for a concrete
 # name to bypass routing entirely. API keys are env-var names, never values.
-listen: ":8080"
+listen: ":11080"
 default: gpt-cheap
 sticky_ttl: 10m
 

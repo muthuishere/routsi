@@ -99,7 +99,7 @@ func answerJob(base, name, id, content string) error {
 // accepted but ignored).
 func runWorker() {
 	fs := flag.NewFlagSet("worker run", flag.ExitOnError)
-	proxy := fs.String("proxy", "http://localhost:8080", "routsi proxy base URL")
+	proxy := fs.String("proxy", "http://localhost:11080", "routsi proxy base URL")
 	name := fs.String("queue", "", "queue name to register/serve (required)")
 	agent := fs.String("agent", "", "agent command; receives the question on stdin, prints the answer (required)")
 	wait := fs.Int("wait", 25, "long-poll seconds")
@@ -146,7 +146,7 @@ func runWorker() {
 // loop itself instead of shelling to `worker run`.
 func workerRegisterCmd() {
 	fs := flag.NewFlagSet("worker register", flag.ExitOnError)
-	proxy := fs.String("proxy", "http://localhost:8080", "routsi proxy base URL")
+	proxy := fs.String("proxy", "http://localhost:11080", "routsi proxy base URL")
 	name := fs.String("queue", "", "queue name to register (required)")
 	_ = fs.Parse(os.Args[2:])
 
@@ -168,7 +168,7 @@ func workerRegisterCmd() {
 // loop (an agent session) just polls again. Network/HTTP errors exit non-zero.
 func workerPollCmd() {
 	fs := flag.NewFlagSet("worker poll", flag.ExitOnError)
-	proxy := fs.String("proxy", "http://localhost:8080", "routsi proxy base URL")
+	proxy := fs.String("proxy", "http://localhost:11080", "routsi proxy base URL")
 	name := fs.String("queue", "", "queue name to poll (required)")
 	wait := fs.Int("wait", 25, "long-poll seconds")
 	_ = fs.Parse(os.Args[2:])
@@ -200,7 +200,7 @@ func workerPollCmd() {
 // stdin (the whole of it). Non-zero exit + stderr on failure.
 func workerAnswerCmd() {
 	fs := flag.NewFlagSet("worker answer", flag.ExitOnError)
-	proxy := fs.String("proxy", "http://localhost:8080", "routsi proxy base URL")
+	proxy := fs.String("proxy", "http://localhost:11080", "routsi proxy base URL")
 	name := fs.String("queue", "", "queue name (required)")
 	id := fs.String("id", "", "job id to answer (required)")
 	text := fs.String("text", "", "answer text (alternative to piping it on stdin)")
@@ -279,7 +279,7 @@ func scaffoldWorker() {
 	io.WriteString(os.Stdout, `#!/bin/sh
 # routsi worker (editable). Needs: curl, and an agent command that reads the
 # question on stdin and prints the answer. No worker auth in v1.
-PROXY="${PROXY:-http://localhost:8080}"
+PROXY="${PROXY:-http://localhost:11080}"
 QUEUE="${QUEUE:-my-agent}"
 AGENT="${AGENT:-cat}"   # e.g. 'codex exec --skip-git-repo-check -' or 'claude -p'
 

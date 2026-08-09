@@ -9,7 +9,7 @@ right agent.** API models (OpenRouter, OpenAI, DeepSeek, …) and local agent CL
 (Devin, Codex, Copilot, Claude Code) behind one `/v1/chat/completions`, chosen per
 task, sticky per conversation. Single Go binary.
 
-[GitHub →](https://github.com/muthuishere/routsi)
+[Get started →](getting-started.md) · [GitHub →](https://github.com/muthuishere/routsi)
 
 ## Why
 
@@ -29,7 +29,7 @@ routsi install               # run as a keep-alive service (launchd/systemd)
 ## Use
 
 ```sh
-curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+curl localhost:11080/v1/chat/completions -H 'content-type: application/json' \
   -d '{"model":"auto","messages":[{"role":"user","content":"hello"}]}'
 ```
 

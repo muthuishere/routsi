@@ -43,7 +43,7 @@ reachable (outbound HTTPS only — no inbound ports needed on your side).
 
 ### 1. Determine the proxy URL and a queue name
 
-Ask the user if either is unknown. Default proxy: `http://localhost:8080` (or whatever the user
+Ask the user if either is unknown. Default proxy: `http://localhost:11080` (or whatever the user
 has running). Pick a **unique, descriptive queue name** — convention `<who>-<agent>`, e.g.
 `alice-claude`, `muthu-codex`. It must not collide with an existing queue or a configured model.
 

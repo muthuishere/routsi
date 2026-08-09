@@ -22,7 +22,7 @@ back as OpenAI JSON/SSE with a `usage` block and an `X-Selected-Model` header.
 task build           # -> bin/routsi (version-stamped)
 task test            # go vet ./... && go test ./...
 task dev             # go run ./cmd/routsi serve -config models.yaml
-routsi serve         # or run the binary; :8080 by default
+routsi serve         # or run the binary; :11080 by default
 ```
 
 Tests are standard `testing`, table-driven, `httptest` for wire, fake shell scripts
