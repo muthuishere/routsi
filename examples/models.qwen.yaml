@@ -1,0 +1,50 @@
+# The starter config from docs/getting-started.md — a cheap rung and a strong
+# rung, both with native tool calling and a very large context window.
+#
+#   cp examples/models.qwen.yaml ~/.config/routsi/models.yaml
+#   echo 'OPENROUTER_API_KEY=sk-or-...' >> ~/.config/routsi/.env
+#   routsi serve
+#
+# Ask for "dyn" to route by task; ask for "small"/"big"/"max" to bypass routing.
+
+listen: ":11080"
+default: small
+sticky_ttl: 10m
+
+tiers: # what plain `model: "auto"` resolves to
+  cheap: small
+  strong: max
+
+models:
+  - name: small # $0.010 / $0.030 per Mtok · 262k ctx (2026-08-09)
+    type: forward
+    provider: openrouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    upstream_model: inclusionai/ling-2.6-flash
+
+  - name: big # $0.030 / $0.130 per Mtok · 1M ctx
+    type: forward
+    provider: openrouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    upstream_model: qwen/qwen3.7-flash
+
+  # Same upstream as `big` today — a separate NAME so the top of the ladder can
+  # be repointed later (qwen3.7-plus, qwen3.7-max, a local agent) without
+  # touching a single client. Clients keep asking for "max" or "dyn".
+  - name: max # $0.030 / $0.130 per Mtok · 1M ctx
+    type: forward
+    provider: openrouter
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    upstream_model: qwen/qwen3.7-flash
+
+  # Declare every level: an omitted one falls back to the nearest DECLARED
+  # level, and `medium` prefers `low` first (internal/router/router.go).
+  - name: dyn
+    type: dynamic
+    levels:
+      low: small
+      medium: big
+      high: max
