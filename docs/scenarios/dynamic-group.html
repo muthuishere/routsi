@@ -30,6 +30,7 @@
     <div class="grp">
       <h4>Start here</h4>
       <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Get started</a>
       <a href="../install.html">Install</a>
       <a href="../quickstart.html">Quick start</a>
       <a href="../concepts.html">Core concepts</a>
@@ -83,7 +84,7 @@
     low: gpt-cheap
     medium: openai/gpt-4o-mini
     high: devin/claude-opus-4.8</pre></div>
-    <div class="code"><div class="top"><span>call it</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+    <div class="code"><div class="top"><span>call it</span><button class="copy">copy</button></div><pre>curl -i localhost:11080/v1/chat/completions \
   -d '{"model":"dynamic-1","messages":[{"role":"user","content":"summarize this paragraph"}]}'
 # → X-Selected-Model: gpt-cheap (classified low)</pre></div>
     <p>Mechanics: <a class="link" href="../routing.html">Routing &amp; stickiness</a>. Classification rules: <a class="link" href="../auto-routing.html">How <code>auto</code> decides</a>.</p>

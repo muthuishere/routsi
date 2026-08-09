@@ -30,6 +30,7 @@
     <div class="grp">
       <h4>Start here</h4>
       <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Get started</a>
       <a href="../install.html">Install</a>
       <a href="../quickstart.html">Quick start</a>
       <a href="../concepts.html">Core concepts</a>
@@ -82,7 +83,7 @@
   cert: ~/.config/routsi/certs/server.crt
   key: ~/.config/routsi/certs/server.key
   client_ca: ~/.config/routsi/certs/ca.crt</pre></div>
-    <div class="code"><div class="top"><span>call it</span><button class="copy">copy</button></div><pre>curl -i https://localhost:8080/v1/chat/completions \
+    <div class="code"><div class="top"><span>call it</span><button class="copy">copy</button></div><pre>curl -i https://localhost:11080/v1/chat/completions \
   --cacert ~/.config/routsi/certs/ca.crt \
   --cert ~/.config/routsi/certs/client.crt \
   --key ~/.config/routsi/certs/client.key \

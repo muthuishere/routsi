@@ -30,6 +30,7 @@
     <div class="grp">
       <h4>Start here</h4>
       <a href="../index.html">Overview</a>
+      <a href="../getting-started.html">Get started</a>
       <a href="../install.html">Install</a>
       <a href="../quickstart.html">Quick start</a>
       <a href="../concepts.html">Core concepts</a>
@@ -84,19 +85,19 @@ echo 'ROUTSI_TOKENS=rtk_9f3a...' >> ~/.config/routsi/.env
 chmod 600 ~/.config/routsi/.env</pre></div>
     <div class="code"><div class="top"><span>2 · models.yaml</span><button class="copy">copy</button></div><pre>auth:
   tokens_env: ROUTSI_TOKENS</pre></div>
-    <div class="code"><div class="top"><span>3 · curl without the header</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+    <div class="code"><div class="top"><span>3 · curl without the header</span><button class="copy">copy</button></div><pre>curl -i localhost:11080/v1/chat/completions \
   -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}'
 # → HTTP/1.1 401 Unauthorized</pre></div>
-    <div class="code"><div class="top"><span>4 · curl with the header</span><button class="copy">copy</button></div><pre>curl -i localhost:8080/v1/chat/completions \
+    <div class="code"><div class="top"><span>4 · curl with the header</span><button class="copy">copy</button></div><pre>curl -i localhost:11080/v1/chat/completions \
   -H 'Authorization: Bearer rtk_9f3a...' \
   -d '{"model":"auto","messages":[{"role":"user","content":"hi"}]}'
 # → HTTP/1.1 200 OK</pre></div>
     <div class="code"><div class="top"><span>5 · same thing via the OpenAI Python SDK</span><button class="copy">copy</button></div><pre>from openai import OpenAI
-client = OpenAI(base_url="http://localhost:8080/v1", api_key="rtk_9f3a...")
+client = OpenAI(base_url="http://localhost:11080/v1", api_key="rtk_9f3a...")
 r = client.chat.completions.create(model="auto", messages=[{"role":"user","content":"hi"}])
 print(r.choices[0].message.content)
 # → 200, works unmodified — the SDK sends the token as a normal api_key</pre></div>
-    <div class="code"><div class="top"><span>6 · the dashboard, token in the URL</span><button class="copy">copy</button></div><pre>open "http://localhost:8080/?token=rtk_9f3a..."</pre></div>
+    <div class="code"><div class="top"><span>6 · the dashboard, token in the URL</span><button class="copy">copy</button></div><pre>open "http://localhost:11080/?token=rtk_9f3a..."</pre></div>
     <div class="callout">/health stays open regardless of auth config — health checks and load balancers never need a token.</div>
 
     <h2 id="adapt">How to adapt</h2>

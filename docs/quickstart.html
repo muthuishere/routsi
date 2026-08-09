@@ -30,6 +30,7 @@
     <div class="grp">
       <h4>Start here</h4>
       <a href="index.html">Overview</a>
+      <a href="getting-started.html">Get started</a>
       <a href="install.html">Install</a>
       <a href="quickstart.html" class="active">Quick start</a>
       <a href="concepts.html">Core concepts</a>
@@ -72,11 +73,11 @@
 
     <h2 id="run">1 · config &amp; run</h2>
     <div class="code"><div class="top"><span>config &amp; run</span><button class="copy">copy</button></div><pre>cp models.yaml ~/.config/routsi/   # or keep ./models.yaml
-routsi serve                       # listens on :8080
+routsi serve                       # listens on :11080
 routsi serve -port 9000            # …or override the port</pre></div>
 
     <h2 id="call">2 · call it (any OpenAI SDK works)</h2>
-    <div class="code"><div class="top"><span>curl</span><button class="copy">copy</button></div><pre>curl localhost:8080/v1/chat/completions \
+    <div class="code"><div class="top"><span>curl</span><button class="copy">copy</button></div><pre>curl localhost:11080/v1/chat/completions \
   -H 'content-type: application/json' \
   -d '{"model":"auto","messages":[{"role":"user","content":"hello"}]}'</pre></div>
     <div class="callout">The chosen answerer is returned in the <b>X-Selected-Model</b> response header, and every response carries a <b>usage</b> block.</div>

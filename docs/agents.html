@@ -30,6 +30,7 @@
     <div class="grp">
       <h4>Start here</h4>
       <a href="index.html">Overview</a>
+      <a href="getting-started.html">Get started</a>
       <a href="install.html">Install</a>
       <a href="quickstart.html">Quick start</a>
       <a href="concepts.html">Core concepts</a>
@@ -71,7 +72,7 @@
     <p class="lede">Agent CLIs are first-class models. Name one directly, or route to one via a dynamic group's <code>high:</code>.</p>
 
     <h2 id="resume">Conversation-mapped sessions</h2>
-    <div class="code"><div class="top"><span>an agent, conversation-mapped</span><button class="copy">copy</button></div><pre>curl localhost:8080/v1/chat/completions \
+    <div class="code"><div class="top"><span>an agent, conversation-mapped</span><button class="copy">copy</button></div><pre>curl localhost:11080/v1/chat/completions \
   -H 'X-Conversation-Id: refactor-1' \
   -d '{"model":"devin/claude-opus-4.8",
        "messages":[{"role":"user","content":"draft a refactor plan"}]}'
