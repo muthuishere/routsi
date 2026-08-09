@@ -40,7 +40,7 @@ type joinJob struct {
 
 func workerJoinCmd() {
 	fs := flag.NewFlagSet("worker join", flag.ExitOnError)
-	proxy := fs.String("proxy", "http://localhost:8080", "routsi proxy base URL")
+	proxy := fs.String("proxy", "http://localhost:11080", "routsi proxy base URL")
 	name := fs.String("queue", "", "queue name to register/serve (required)")
 	workdir := fs.String("workdir", ".", "directory for job-<id>.md / answer-<id>.json handoff files")
 	notify := fs.String("notify", "", "command run per job (sh -c) to tell the agent about the job file (required); gets ROUTSI_JOB_ID/ROUTSI_JOB_FILE/ROUTSI_ANSWER_FILE in env")

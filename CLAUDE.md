@@ -505,6 +505,56 @@ Still open: `routsi token|cert` utility (mint bearer tokens, self-signed + mTLS 
 auto-generate on first serve); socket transport; benchmark harness into the repo as
 `benchmark/`; README/site rewrite around the adapter framing.
 
+## 2026-08-09 — React dashboard, capability matrix, getting-started, default port
+
+**Dashboard is a React app now.** `internal/server/dashboard.html` is GONE; `ui/` (React
+19 + Vite 7 + TS) builds to `internal/server/public/`, embedded via `//go:embed
+all:public` in `internal/server/dashboard.go`. `server.go` serves it with one line
+(`mux.Handle("GET /", dashboardHandler())`); unknown paths stay 404, assets get an
+immutable Cache-Control. **The build output is COMMITTED** so `go build` works on a
+clone with no node toolchain — only `ui/node_modules` + tsbuildinfo are gitignored.
+`task ui` (sources/generates, so it's a no-op when clean) and `task ui:dev` (hot reload,
+proxies to `$ROUTSI_URL`). New **Endpoint panel**: shows the live base URL
+(`location.origin + "/v1"`), auth state, copy button, and tabbed curl/python/node/env
+snippets generated from the real catalog — so a newcomer can connect without reading
+docs. `usePoll` keeps the last good value on a failed poll instead of blanking.
+
+**`task matrix` — the e2e capability artifact** (`internal/server/matrix_test.go`, one
+scripted run through the real server, prints a box-drawing table). 8 capabilities ×
+4 transports + a routing row, **34/34 green**: complete · multi-turn · tool call ·
+parallel · tool chain · stream · stream tools · memory, over forward(openai) /
+translated(anthropic) / queue(pull-worker) / command(exec adapter). All four run the
+SAME mock brain (the adapter's is a POSIX shell port using `grep -o | wc -l`) driven only
+by the transcript, so a difference in the matrix is a difference in routsi, not the
+fixture. `turns=(\d+)` reported by the backend is the history-fidelity discriminator
+across four wire formats — that's what would catch an ADR-010-style `split()` regression.
+Honest columns, not fake ✓s: queue is non-streaming by ADR-001 design (`·`), and
+`memory` means proxy-managed memory for forward/translated but conv-id-relay for
+queue/command (they're stateless by contract). **Falsification-checked**: flipping
+queue's `proxyMemory` to true printed `✗ FAIL` with the exact reason, then reverted —
+the matrix can go red. Stream-tools was previously an UNVERIFIED claim (indexed deltas
+via `NewToolChunk`); now proven on all three streaming transports.
+
+**`docs/getting-started.md` + `examples/models.qwen.yaml`** — the launcher doc: install →
+configure → run, then routing/tools/sticky/dashboard, then growing the config
+(name-only headroom rung, Claude session as a queue, `type: command` adapter, custom
+decider), then gotchas. Linked from README + docs/index.md.
+
+Two facts worth keeping, both measured live: (1) **an omitted `medium` level silently
+sends medium-scored work to the CHEAP rung** — `router.Fallback` returns
+`{medium, low, high}` (router.go:36-45), so always declare all three. (2) **Reasoning
+models eat `max_tokens` before writing a word** — qwen3.7-flash at `max_tokens:300`
+returns `content:null` / `finish_reason:length` / 300 reasoning tokens. Fixes:
+room (2000+) or `{"reasoning":{"enabled":false}}` — the latter works precisely because
+`type: forward` is raw passthrough, so provider knobs reach upstream untouched.
+
+**Default listen port `:8080` → `:11080`** (owner call — 8080 collides with everything).
+Changed at `internal/config/config.go` `Defaults`, `cmd/routsi` worker/join `--proxy`
+defaults + scaffold `PROXY`, certs/main help text, sample `models.yaml`, README/AGENTS/
+docs/index/opencode, Taskfile, `ui/vite.config.ts` (now `process.env.ROUTSI_URL ??`
+default, so the dev proxy is configurable). No test asserted the old default. ADR
+003/005 example URLs left alone — they're historical records.
+
 <!-- ctx-optimize:begin -->
 <ctx-optimize>
   <precondition>Run `command -v ctx-optimize` first. If it is NOT installed, IGNORE this entire

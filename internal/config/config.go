@@ -249,7 +249,7 @@ func Load(path string) (*Config, error) {
 }
 
 func Parse(b []byte) (*Config, error) {
-	cfg := &Config{Listen: ":8080", StickyTTL: 10 * time.Minute, StreamHeartbeat: 15 * time.Second}
+	cfg := &Config{Listen: ":11080", StickyTTL: 10 * time.Minute, StreamHeartbeat: 15 * time.Second}
 	if err := yaml.Unmarshal(b, cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}

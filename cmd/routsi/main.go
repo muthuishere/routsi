@@ -87,7 +87,7 @@ usage:
   routsi version
 
 config resolution: -config flag > ./models.yaml > ~/.config/routsi/models.yaml
-listen resolution: -listen flag > -port flag > models.yaml 'listen:' > ':8080'
+listen resolution: -listen flag > -port flag > models.yaml 'listen:' > ':11080'
 env resolution:    process env > -env/ROUTSI_ENV_FILE > ./.env > ~/.config/routsi/.env
 dashboard + metrics: http://<listen>/  ·  /stats  ·  /metrics
 `)
@@ -112,7 +112,7 @@ func resolveConfigPath(flagVal string) string {
 // outright; -port is a shorthand that becomes ":PORT" when it's digits-only
 // (so "-port 9000" -> ":9000"), or is used as-is otherwise (e.g. "0.0.0.0:9000").
 // Empty return means "no override" — caller keeps whatever config.Load set
-// (yaml `listen:` or its own ":8080" default).
+// (yaml `listen:` or its own ":11080" default).
 func resolveListen(listenFlag, portFlag string) string {
 	if listenFlag != "" {
 		return listenFlag
@@ -181,7 +181,7 @@ func loadEnvFiles(explicit string) {
 
 func serve() {
 	cfgPath := flag.String("config", "", "path to models.yaml")
-	listenFlag := flag.String("listen", "", "listen address, e.g. :8080 or 0.0.0.0:8080 (overrides models.yaml listen)")
+	listenFlag := flag.String("listen", "", "listen address, e.g. :11080 or 0.0.0.0:11080 (overrides models.yaml listen)")
 	portFlag := flag.String("port", "", "listen port shorthand for -listen ':PORT'")
 	envFlag := flag.String("env", "", "path to an env file to load (in addition to ./.env and ~/.config/routsi/.env)")
 	flag.Parse()

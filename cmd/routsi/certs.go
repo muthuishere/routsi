@@ -96,7 +96,7 @@ Enable mTLS in models.yaml:
 
 Client call (curl):
   curl --cacert %[1]s/ca.crt --cert %[1]s/client-1.crt --key %[1]s/client-1.key \
-    https://localhost:8080/v1/models
+    https://localhost:11080/v1/models
 
 OpenAI SDKs: pass an http client configured with the client cert + CA.
 Keep *.key files private (written 0600). Revocation = re-run and rotate the CA.

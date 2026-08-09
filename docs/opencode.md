@@ -25,7 +25,7 @@ models:
   "provider": {
     "routsi": {
       "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "http://127.0.0.1:8080/v1" },
+      "options": { "baseURL": "http://127.0.0.1:11080/v1" },
       "models": { "codex": {}, "claude-fast": {} }
     }
   },
