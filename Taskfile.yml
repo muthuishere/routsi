@@ -16,8 +16,28 @@ tasks:
       - go vet ./...
       - go test ./...
 
+  matrix:
+    desc: Print the capability matrix (every transport x every capability, e2e)
+    cmds:
+      - go test ./internal/server -run CapabilityMatrix -v -count=1 | sed -n '/routsi capability matrix/,/^--- PASS/p'
+
+  ui:
+    desc: Build the dashboard (ui/ React app -> internal/server/public, embedded)
+    dir: ui
+    sources: ["src/**/*", "index.html", "package.json", "vite.config.ts"]
+    generates: ["../internal/server/public/index.html"]
+    cmds:
+      - npm ci --silent || npm install --silent
+      - npm run build
+
+  ui:dev:
+    desc: Dashboard with hot reload (proxies the API to a routsi on :11080)
+    dir: ui
+    cmds:
+      - npm run dev
+
   build:
-    desc: Build the routsi binary (version-stamped)
+    desc: Build the routsi binary (version-stamped; run `task ui` after UI edits)
     cmds:
       - go build -ldflags "-s -w -X main.version={{.VERSION}}" -o bin/routsi ./cmd/routsi
 

@@ -11,6 +11,11 @@
 .idea/
 .vscode/
 
+# dashboard build (ui/ -> internal/server/public is COMMITTED so `go build`
+# works without a node toolchain; only the toolchain's own scratch is ignored)
+/ui/node_modules/
+/ui/tsconfig.tsbuildinfo
+
 # go
 *.test
 *.out
