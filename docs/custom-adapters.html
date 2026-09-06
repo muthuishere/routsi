@@ -1,0 +1,151 @@
+<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Create
+a custom
+adapter — routsi docs</title><meta name="description" content="Create a
+custom
+adapter"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="../styles.css"></head><body><div class="bg"></div>
+<nav><div class="wrap"><a class="brand" href="../index.html"><span class="dot"></span>routsi</a><div class="nav-links"><a href="../index.html#compare">Compare</a><a href="../index.html#who">Who it's for</a><a href="index.html">Docs</a><button class="themebtn" id="theme" aria-label="Toggle theme">◑</button><a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a></div></div></nav>
+<div class="docshell"><aside class="sidebar"><div class="grp"><h4>Start here</h4><a href="index.html">Overview</a><a href="getting-started.html">Get started</a><a href="configuration.html">models.yaml</a></div><div class="grp"><h4>Built-in providers</h4><a href="claude.html">Claude on AWS</a><a href="devin.html">Devin direct</a></div><div class="grp"><h4>Extend</h4><a href="custom-adapters.html">Custom adapters</a></div><div class="grp"><h4>Operate</h4><a href="dashboard.html">Dashboard &amp; metrics</a><a href="analytics.html">S3 &amp; DuckDB analytics</a><a href="auth.html">Auth &amp; mTLS</a><a href="api.html">HTTP API</a></div></aside><main class="doc-main"><h1
+id="create-a-custom-adapter">Create a custom adapter</h1>
+<h2 id="built-in-native-adapters-need-no-registration">Built-in native
+adapters need no registration</h2>
+<p>Routsi’s direct providers self-register inside the binary. For
+example, <code>provider: devin</code> and
+<code>provider: claude-bedrock</code> need no adapter script, handler,
+or <code>routsi install --adapters</code> step. A model entry only
+selects the provider and its upstream model/account settings.</p>
+<p>The shipped <code>models.yaml</code> keeps the Devin, Claude-on-AWS,
+local-Llama, and JavaScript examples commented. Consequently, installing
+or starting Routsi does not initialize them, inspect their login state,
+or send provider traffic. Uncomment only the model you intend to
+expose.</p>
+<p>The command contract below is for third-party or project-specific
+executables. New built-in Go providers implement
+<code>backend.SubscriptionFactory</code> and call
+<code>backend.RegisterSubscription</code> from their package
+initialization; the generic server path discovers them
+automatically.</p>
+<p>A Routsi adapter turns any trusted executable into an
+OpenAI-compatible model. The simplest production-supported transport is
+<code>type: command</code>: Routsi starts the command for each request,
+writes one JSON job to stdin, and reads one answer from stdout.</p>
+<h2 id="create-the-adapter">1. Create the adapter</h2>
+<p>Save this minimal Node.js adapter as
+<code>adapters/example.mjs</code>:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode js"><code class="sourceCode javascript"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> input <span class="op">=</span> <span class="st">&quot;&quot;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="cf">await</span> (<span class="kw">const</span> chunk <span class="kw">of</span> <span class="bu">process</span><span class="op">.</span><span class="at">stdin</span>) input <span class="op">+=</span> chunk</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> job <span class="op">=</span> <span class="bu">JSON</span><span class="op">.</span><span class="fu">parse</span>(input)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> last <span class="op">=</span> job<span class="op">.</span><span class="at">messages</span><span class="op">.</span><span class="fu">at</span>(<span class="op">-</span><span class="dv">1</span>)<span class="op">?.</span><span class="at">content</span> <span class="op">??</span> job<span class="op">.</span><span class="at">prompt</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="bu">process</span><span class="op">.</span><span class="at">stdout</span><span class="op">.</span><span class="fu">write</span>(<span class="bu">JSON</span><span class="op">.</span><span class="fu">stringify</span>({</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">content</span><span class="op">:</span> <span class="vs">`Adapter received: </span><span class="sc">${</span>last<span class="sc">}</span><span class="vs">`</span><span class="op">,</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>}))</span></code></pre></div>
+<p>An adapter may instead write plain text; Routsi treats the complete
+stdout as assistant content. Keep logs on stderr because stdout is the
+protocol channel.</p>
+<h2 id="register-it">2. Register it</h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">models</span><span class="kw">:</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> my-adapter</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">type</span><span class="kw">:</span><span class="at"> command</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">provider</span><span class="kw">:</span><span class="at"> local</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">command</span><span class="kw">:</span><span class="at"> node ./adapters/example.mjs</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">workdir</span><span class="kw">:</span><span class="at"> /absolute/path/to/your/project</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">timeout</span><span class="kw">:</span><span class="at"> 2m</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">tools</span><span class="kw">:</span><span class="at"> native</span></span></code></pre></div>
+<p><code>command</code> runs through <code>sh -c</code>.
+<code>workdir</code> defaults to Routsi’s managed work directory, so set
+it explicitly when the command uses relative paths.</p>
+<p>Start Routsi and test the adapter:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">routsi</span> serve</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> http://127.0.0.1:11080/v1/chat/completions <span class="dt">\</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;content-type: application/json&#39;</span> <span class="dt">\</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">-d</span> <span class="st">&#39;{&quot;model&quot;:&quot;my-adapter&quot;,&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;hello&quot;}]}&#39;</span></span></code></pre></div>
+<h2 id="job-contract">Job contract</h2>
+<p>Routsi writes one JSON object with these fields:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;cmd_ab12&quot;</span><span class="fu">,</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;my-adapter&quot;</span><span class="fu">,</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;upstream_model&quot;</span><span class="fu">:</span> <span class="st">&quot;optional-native-model&quot;</span><span class="fu">,</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;conversation_id&quot;</span><span class="fu">:</span> <span class="st">&quot;optional-conversation-id&quot;</span><span class="fu">,</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;stream&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;prompt&quot;</span><span class="fu">:</span> <span class="st">&quot;rendered complete transcript&quot;</span><span class="fu">,</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;messages&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span><span class="dt">&quot;role&quot;</span><span class="fu">:</span><span class="st">&quot;user&quot;</span><span class="fu">,</span><span class="dt">&quot;content&quot;</span><span class="fu">:</span><span class="st">&quot;hello&quot;</span><span class="fu">}</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;tools&quot;</span><span class="fu">:</span> <span class="ot">[]</span><span class="fu">,</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;tool_choice&quot;</span><span class="fu">:</span> <span class="kw">null</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>The common values are also available as <code>ROUTSI_MODEL</code>,
+<code>ROUTSI_UPSTREAM_MODEL</code>, <code>ROUTSI_CONVERSATION_ID</code>,
+<code>ROUTSI_JOB_ID</code>, and <code>ROUTSI_STREAM</code>.</p>
+<h2 id="answer-contract">Answer contract</h2>
+<p>Return plain text or a JSON object:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;content&quot;</span><span class="fu">:</span><span class="st">&quot;normal assistant answer&quot;</span><span class="fu">}</span></span></code></pre></div>
+<p>For client-executed tools, return the simplified form:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;tool_calls&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span><span class="dt">&quot;name&quot;</span><span class="fu">:</span><span class="st">&quot;get_weather&quot;</span><span class="fu">,</span><span class="dt">&quot;arguments&quot;</span><span class="fu">:{</span><span class="dt">&quot;city&quot;</span><span class="fu">:</span><span class="st">&quot;Chennai&quot;</span><span class="fu">}}</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>Routsi generates missing call IDs and emits an OpenAI response with
+<code>finish_reason: "tool_calls"</code>. The full OpenAI tool-call
+shape is accepted too.</p>
+<h2 id="choose-a-tool-mode">Choose a tool mode</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>mode</th>
+<th>behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>native</code></td>
+<td>The request’s tools reach the adapter and it may return
+<code>tool_calls</code>.</td>
+</tr>
+<tr>
+<td><code>emulated</code></td>
+<td>Routsi embeds a fenced JSON tool contract in <code>prompt</code> and
+parses the response.</td>
+</tr>
+<tr>
+<td><code>off</code></td>
+<td>Requests containing tools fail with HTTP 400 instead of silently
+dropping them.</td>
+</tr>
+</tbody>
+</table>
+<p>Use <code>native</code> only when the adapter returns a suspended
+tool request for the API client. Do not translate tools that the
+underlying agent already executed locally; that would cause the
+operation to run twice.</p>
+<h2 id="validate-failure-behavior">Validate failure behavior</h2>
+<p>Before routing real traffic, check all four cases:</p>
+<ol type="1">
+<li>Plain text answer.</li>
+<li>Structured <code>content</code> answer.</li>
+<li>A tool call with exact JSON arguments and the following
+<code>role: tool</code> turn.</li>
+<li>Timeout or non-zero exit without secrets appearing in stderr.</li>
+</ol>
+<p>Command streaming is currently buffered. Use a <a
+href="adr/001-pull-worker-queue.md"><code>queue</code></a> for remote or
+interactive workers. The long-lived socket adapter described by <a
+href="adr/013-adapter-contract.md">ADR-013</a> is planned, not
+shipped.</p>
+<h2 id="security-boundary">Security boundary</h2>
+<p>An adapter runs with Routsi’s OS permissions and inherited
+environment. Only configure commands you would run yourself. Read
+credentials from their environment variable names at runtime; never
+print them, place literal values in YAML, or return them in errors.</p>
+<p>For ready-made CLI wrappers, see <a
+href="https://github.com/muthuishere/routsi/tree/main/examples/adapters"><code>examples/adapters/</code></a>.</p></main></div>
+<footer><div class="wrap"><div class="brand"><span class="dot"></span>routsi</div><div><a href="../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div></div></footer><script>const root=document.documentElement,tb=document.getElementById('theme');const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t)};</script></body></html>

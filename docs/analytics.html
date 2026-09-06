@@ -1,0 +1,77 @@
+<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>S3
+and DuckDB
+analytics — routsi docs</title><meta name="description" content="S3 and
+DuckDB
+analytics"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="../styles.css"></head><body><div class="bg"></div>
+<nav><div class="wrap"><a class="brand" href="../index.html"><span class="dot"></span>routsi</a><div class="nav-links"><a href="../index.html#compare">Compare</a><a href="../index.html#who">Who it's for</a><a href="index.html">Docs</a><button class="themebtn" id="theme" aria-label="Toggle theme">◑</button><a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a></div></div></nav>
+<div class="docshell"><aside class="sidebar"><div class="grp"><h4>Start here</h4><a href="index.html">Overview</a><a href="getting-started.html">Get started</a><a href="configuration.html">models.yaml</a></div><div class="grp"><h4>Built-in providers</h4><a href="claude.html">Claude on AWS</a><a href="devin.html">Devin direct</a></div><div class="grp"><h4>Extend</h4><a href="custom-adapters.html">Custom adapters</a></div><div class="grp"><h4>Operate</h4><a href="dashboard.html">Dashboard &amp; metrics</a><a href="analytics.html">S3 &amp; DuckDB analytics</a><a href="auth.html">Auth &amp; mTLS</a><a href="api.html">HTTP API</a></div></aside><main class="doc-main"><h1
+id="s3-and-duckdb-analytics">S3 and DuckDB analytics</h1>
+<p>Routsi can persist operational usage data to an S3-compatible bucket
+without putting storage latency on the inference path. S3 is the durable
+source of truth; DuckDB reads the bucket directly for historical
+aggregation. MinIO is the included local-development implementation of
+the same S3 contract.</p>
+<h2 id="what-the-dashboard-shows">What the dashboard shows</h2>
+<p>The live dashboard shows requests, estimated input/output/total
+tokens, routing split, error rate, average/maximum latency, most-used
+providers and models, escalations, and S3 pipeline health. Values reset
+when Routsi restarts; bucket data supplies durable history.</p>
+<p>Token counts are labelled estimated unless an upstream exposes
+trustworthy usage.</p>
+<h2 id="enable-the-s3-event-stream">Enable the S3 event stream</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">analytics</span><span class="kw">:</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">bucket</span><span class="kw">:</span><span class="at"> routsi-analytics</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">prefix</span><span class="kw">:</span><span class="at"> routsi/usage</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">region</span><span class="kw">:</span><span class="at"> us-east-1</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">profile</span><span class="kw">:</span><span class="at"> default</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">flush_interval</span><span class="kw">:</span><span class="at"> 10s</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">batch_size</span><span class="kw">:</span><span class="at"> </span><span class="dv">100</span></span></code></pre></div>
+<p>Routsi uses the AWS SDK credential chain. Each immutable JSONL object
+is partitioned as:</p>
+<pre class="text"><code>routsi/usage/year=YYYY/month=MM/day=DD/hour=HH/&lt;timestamp&gt;-&lt;uuid&gt;.jsonl</code></pre>
+<p>Events contain model/provider selection, routing metadata, status,
+latency, token counts, whether tools were requested, and a truncated
+hash of the conversation identifier. Prompts, responses, tool arguments,
+credentials, and raw conversation IDs are excluded.</p>
+<p>If an upload fails, the batch is written with owner-only permissions
+under <code>~/.config/routsi/analytics-spool</code>. Queue overflow is
+counted rather than blocking an LLM response. Pipeline health appears in
+<code>/stats</code> and the dashboard.</p>
+<h2 id="local-minio">Local MinIO</h2>
+<p>The included Compose file uses obvious development-only
+credentials:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> compose <span class="at">-f</span> compose.analytics.yml up <span class="at">-d</span></span></code></pre></div>
+<p>Configure Routsi:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">analytics</span><span class="kw">:</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">bucket</span><span class="kw">:</span><span class="at"> routsi-analytics</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">prefix</span><span class="kw">:</span><span class="at"> routsi/usage</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">region</span><span class="kw">:</span><span class="at"> us-east-1</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">endpoint</span><span class="kw">:</span><span class="at"> http://127.0.0.1:19000</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="fu">use_path_style</span><span class="kw">:</span><span class="at"> </span><span class="ch">true</span></span></code></pre></div>
+<p>Set <code>AWS_ACCESS_KEY_ID</code> and
+<code>AWS_SECRET_ACCESS_KEY</code> to the development values declared in
+the Compose file before starting Routsi. Do not reuse those credentials
+outside local development.</p>
+<p>The development API and console listen on ports <code>19000</code>
+and <code>19001</code> to avoid colliding with common local MinIO
+installations.</p>
+<h2 id="aggregate-with-duckdb">Aggregate with DuckDB</h2>
+<p>DuckDB remains outside the inference binary so Routsi can retain
+static, CGO-free cross-platform releases. Install DuckDB, let its AWS
+credential chain access the bucket, then run the shipped queries:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">ROUTSI_ANALYTICS_S3_GLOB</span><span class="op">=</span><span class="st">&#39;s3://routsi-analytics/routsi/usage/**/*.jsonl&#39;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="ex">duckdb</span> <span class="op">&lt;</span> examples/analytics/aggregate.sql</span></code></pre></div>
+<p>The queries produce global totals and per-provider/model request,
+token, average-latency, p95-latency, and error aggregates. DuckDB’s
+<code>httpfs</code> extension supports AWS S3 and MinIO; the bucket
+layout also works with other compatible services such as R2.</p>
+<p>DuckDB can also compact and upload the raw stream as partitioned
+Parquet:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">ROUTSI_ANALYTICS_PARQUET_URI</span><span class="op">=</span><span class="st">&#39;s3://routsi-analytics/routsi/parquet&#39;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">duckdb</span> <span class="op">&lt;</span> examples/analytics/compact.sql</span></code></pre></div>
+<p>Schedule compaction independently of Routsi. It uses UUID filenames
+with append mode, so inference and analytical uploads remain separate
+and neither requires a database daemon.</p></main></div>
+<footer><div class="wrap"><div class="brand"><span class="dot"></span>routsi</div><div><a href="../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div></div></footer><script>const root=document.documentElement,tb=document.getElementById('theme');const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t)};</script></body></html>

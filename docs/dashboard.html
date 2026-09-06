@@ -70,10 +70,11 @@
   <main class="doc-main">
     <h1>Dashboard &amp; metrics</h1>
     <ul>
-      <li><strong><code>/</code></strong> — a self-contained live dashboard (requests, tokens, latency, routing split, escalations, worker status), auto-refreshing, theme-aware.</li>
+      <li><strong><code>/</code></strong> — requests, estimated input/output/total tokens, latency, errors, routing split, top providers/models, escalations, workers, and S3 pipeline health.</li>
       <li><strong><code>/stats</code></strong> — a JSON snapshot.</li>
       <li><strong><code>/metrics</code></strong> — Prometheus text to scrape.</li>
     </ul>
+    <p>For durable history and DuckDB aggregation, see <a class="link" href="analytics.html">S3 &amp; DuckDB analytics</a>.</p>
 
     <h2 id="service">Run as a service</h2>
     <p>Keep routsi up across crashes and logins — launchd on macOS, systemd-user on Linux. No root; everything lives under your home dir.</p>

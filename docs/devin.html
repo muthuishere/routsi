@@ -1,0 +1,88 @@
+<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Use
+Devin with
+routsi — routsi docs</title><meta name="description" content="Use Devin
+with
+routsi"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="../styles.css"></head><body><div class="bg"></div>
+<nav><div class="wrap"><a class="brand" href="../index.html"><span class="dot"></span>routsi</a><div class="nav-links"><a href="../index.html#compare">Compare</a><a href="../index.html#who">Who it's for</a><a href="index.html">Docs</a><button class="themebtn" id="theme" aria-label="Toggle theme">◑</button><a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a></div></div></nav>
+<div class="docshell"><aside class="sidebar"><div class="grp"><h4>Start here</h4><a href="index.html">Overview</a><a href="getting-started.html">Get started</a><a href="configuration.html">models.yaml</a></div><div class="grp"><h4>Built-in providers</h4><a href="claude.html">Claude on AWS</a><a href="devin.html">Devin direct</a></div><div class="grp"><h4>Extend</h4><a href="custom-adapters.html">Custom adapters</a></div><div class="grp"><h4>Operate</h4><a href="dashboard.html">Dashboard &amp; metrics</a><a href="analytics.html">S3 &amp; DuckDB analytics</a><a href="auth.html">Auth &amp; mTLS</a><a href="api.html">HTTP API</a></div></aside><main class="doc-main"><h1
+id="use-devin-with-routsi">Use Devin with routsi</h1>
+<p>Routsi connects directly to Devin’s authenticated Cascade service. It
+does not launch the Devin CLI during inference and does not emulate tool
+calls in prompts.</p>
+<h2 id="prerequisite">Prerequisite</h2>
+<p>Complete Devin’s normal login once as the OS user that runs Routsi.
+Routsi reuses the resulting local authentication state from
+<code>~/.local/share/devin/credentials.toml</code>. The file must be a
+regular, non-symlink file readable only by its owner.</p>
+<p>The <code>devin</code> executable does not need to be on
+<code>PATH</code> after authentication has been established. Never copy
+the credential into <code>models.yaml</code>.</p>
+<h2 id="configure-the-direct-adapter">Configure the direct adapter</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">models</span><span class="kw">:</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> devin</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">type</span><span class="kw">:</span><span class="at"> subscription</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">provider</span><span class="kw">:</span><span class="at"> devin</span></span></code></pre></div>
+<p>Routsi performs the native sequence itself:</p>
+<ol type="1">
+<li><code>GetUserJwt</code> exchanges the stored session credential for
+a short-lived user JWT.</li>
+<li><code>GetCliModelConfigs</code> discovers the account’s available
+model UIDs.</li>
+<li><code>AssignModel</code> resolves adaptive/router models when
+required.</li>
+<li><code>GetChatMessage</code> streams protobuf frames over Connect
+HTTP.</li>
+</ol>
+<p>Call it through the normal OpenAI-compatible endpoint:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> http://127.0.0.1:11080/v1/chat/completions <span class="dt">\</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;content-type: application/json&#39;</span> <span class="dt">\</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-d</span> <span class="st">&#39;{</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="st">    &quot;model&quot;:&quot;devin&quot;,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="st">    &quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Explain this repository.&quot;}]</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="st">  }&#39;</span></span></code></pre></div>
+<h2 id="select-a-model">Select a model</h2>
+<p>Leave <code>upstream_model</code> empty to use Devin’s advertised
+default. To select an account- available model, use its label or wire
+UID:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> devin-swe</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">type</span><span class="kw">:</span><span class="at"> subscription</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">provider</span><span class="kw">:</span><span class="at"> devin</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">upstream_model</span><span class="kw">:</span><span class="at"> SWE-1.6 Slow</span></span></code></pre></div>
+<p>An unavailable or disabled model fails explicitly; Routsi does not
+silently substitute a premium model.</p>
+<h2 id="native-tool-calls">Native tool calls</h2>
+<p>Send ordinary OpenAI function tools. Routsi maps their names,
+descriptions, JSON schemas, and strictness into Devin’s
+<code>ChatToolDefinition</code> protobuf and maps streamed
+<code>ChatToolCall</code> deltas back into OpenAI
+<code>tool_calls</code>:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> http://127.0.0.1:11080/v1/chat/completions <span class="dt">\</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;content-type: application/json&#39;</span> <span class="dt">\</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-d</span> <span class="st">&#39;{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="st">    &quot;model&quot;:&quot;devin&quot;,</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="st">    &quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Get the weather for Chennai.&quot;}],</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="st">    &quot;tools&quot;:[{&quot;type&quot;:&quot;function&quot;,&quot;function&quot;:{</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="st">      &quot;name&quot;:&quot;get_weather&quot;,</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="st">      &quot;description&quot;:&quot;Get weather for a city&quot;,</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="st">      &quot;parameters&quot;:{&quot;type&quot;:&quot;object&quot;,&quot;properties&quot;:{&quot;city&quot;:{&quot;type&quot;:&quot;string&quot;}},&quot;required&quot;:[&quot;city&quot;]}</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="st">    }}]</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="st">  }&#39;</span></span></code></pre></div>
+<p>No tool manifest is added to the prompt.</p>
+<h2 id="live-e2e">Live E2E</h2>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">go</span> test ./internal/server <span class="at">-run</span> <span class="st">&#39;^TestLiveDevinDirect&#39;</span> <span class="at">-count</span><span class="op">=</span>1 <span class="at">-v</span></span></code></pre></div>
+<p>The live tests cover both exact text completion and a schema-checked
+native tool call. They skip when authentication state is missing or
+unsafe, and when <code>-short</code> is used. They do not require or
+invoke the Devin executable.</p>
+<h2 id="optional-cli-example">Optional CLI example</h2>
+<p>The generic CLI wrapper remains only as an editable example under
+<code>examples/adapters/cli.js</code>. A user may configure it as
+<code>type: command</code>, but it is not the Devin integration
+described on this page and is not built into Routsi’s provider.</p>
+<p>See <a
+href="adr/015-subscription-backed-cli-providers.md">ADR-015</a> and <a
+href="spikes/008-subscription-cli-protocols.md">Spike 008</a> for
+protocol provenance and the security boundary.</p></main></div>
+<footer><div class="wrap"><div class="brand"><span class="dot"></span>routsi</div><div><a href="../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div></div></footer><script>const root=document.documentElement,tb=document.getElementById('theme');const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t)};</script></body></html>

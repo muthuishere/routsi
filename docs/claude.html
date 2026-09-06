@@ -1,0 +1,85 @@
+<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Use
+Claude on AWS with
+routsi — routsi docs</title><meta name="description" content="Use Claude
+on AWS with
+routsi"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="../styles.css"></head><body><div class="bg"></div>
+<nav><div class="wrap"><a class="brand" href="../index.html"><span class="dot"></span>routsi</a><div class="nav-links"><a href="../index.html#compare">Compare</a><a href="../index.html#who">Who it's for</a><a href="index.html">Docs</a><button class="themebtn" id="theme" aria-label="Toggle theme">◑</button><a class="btn btn-ghost nav-cta" href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub ↗</a></div></div></nav>
+<div class="docshell"><aside class="sidebar"><div class="grp"><h4>Start here</h4><a href="index.html">Overview</a><a href="getting-started.html">Get started</a><a href="configuration.html">models.yaml</a></div><div class="grp"><h4>Built-in providers</h4><a href="claude.html">Claude on AWS</a><a href="devin.html">Devin direct</a></div><div class="grp"><h4>Extend</h4><a href="custom-adapters.html">Custom adapters</a></div><div class="grp"><h4>Operate</h4><a href="dashboard.html">Dashboard &amp; metrics</a><a href="analytics.html">S3 &amp; DuckDB analytics</a><a href="auth.html">Auth &amp; mTLS</a><a href="api.html">HTTP API</a></div></aside><main class="doc-main"><h1
+id="use-claude-on-aws-with-routsi">Use Claude on AWS with routsi</h1>
+<p>Routsi calls Amazon Bedrock’s <code>Converse</code> API directly with
+AWS SigV4. It uses native Claude tool use and explicit Bedrock
+prompt-cache checkpoints. It does not launch Claude Code, extract a
+Claude token, or emulate tool calls in a prompt.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ol type="1">
+<li>Enable a Claude model or cross-region inference profile in Amazon
+Bedrock.</li>
+<li>Give the AWS identity <code>bedrock:InvokeModel</code> permission
+for that resource.</li>
+<li>Log in as the same OS user that runs Routsi:</li>
+</ol>
+<div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aws</span> login</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">aws</span> sts get-caller-identity</span></code></pre></div>
+<p>For an IAM Identity Center/SSO profile, use:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aws</span> sso login <span class="at">--profile</span> my-profile</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">aws</span> sts get-caller-identity <span class="at">--profile</span> my-profile</span></code></pre></div>
+<p>Routsi uses the AWS SDK default credential chain, including
+environment credentials, shared AWS config, <code>aws login</code>/SSO
+sessions, <code>credential_process</code>, web identity, container
+credentials, and instance roles. Credentials stay in AWS’s stores and
+are refreshed by the SDK; never copy them into
+<code>models.yaml</code>.</p>
+<h2 id="configure-the-built-in-adapter">Configure the built-in
+adapter</h2>
+<p>The adapter is compiled into Routsi and self-registers as
+<code>claude-bedrock</code>. There is no adapter install command, script
+path, handler registration, or CLI dependency.</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">models</span><span class="kw">:</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> claude-aws</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">type</span><span class="kw">:</span><span class="at"> subscription</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">provider</span><span class="kw">:</span><span class="at"> claude-bedrock</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">upstream_model</span><span class="kw">:</span><span class="at"> us.anthropic.claude-sonnet-4-5-20250929-v1:0</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">aws_region</span><span class="kw">:</span><span class="at"> us-east-1</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="at">    </span><span class="fu">aws_profile</span><span class="kw">:</span><span class="at"> default</span></span></code></pre></div>
+<p><code>upstream_model</code> may be a Bedrock model ID,
+inference-profile ID, or ARN. Omit <code>aws_profile</code> to use the
+normal default chain. Omit <code>aws_region</code> when the selected AWS
+profile or <code>AWS_REGION</code> already supplies it.</p>
+<p>Call it through Routsi’s OpenAI-compatible endpoint:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">curl</span> http://127.0.0.1:11080/v1/chat/completions <span class="dt">\</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">-H</span> <span class="st">&#39;content-type: application/json&#39;</span> <span class="dt">\</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">-d</span> <span class="st">&#39;{&quot;model&quot;:&quot;claude-aws&quot;,&quot;messages&quot;:[{&quot;role&quot;:&quot;user&quot;,&quot;content&quot;:&quot;Explain this repository.&quot;}]}&#39;</span></span></code></pre></div>
+<h2 id="native-tool-calls-and-prompt-caching">Native tool calls and
+prompt caching</h2>
+<p>OpenAI function definitions are mapped to Bedrock
+<code>ToolSpecification</code> values. Claude’s <code>toolUse</code>
+response is returned as an OpenAI <code>tool_calls</code> response, and
+the following OpenAI <code>role: tool</code> message becomes a Bedrock
+<code>toolResult</code>. Routsi never executes the tool itself.</p>
+<p>Stable tool definitions are sorted and followed by a Bedrock cache
+point. System instructions also receive an explicit cache point. Cache
+creation still depends on the selected model’s Bedrock caching support
+and minimum-token rules.</p>
+<h2 id="live-e2e">Live E2E</h2>
+<p>Live tests are opt-in because Bedrock model IDs, access, region, and
+charges belong to the AWS account:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="va">ROUTSI_BEDROCK_TEST_MODEL</span><span class="op">=</span><span class="st">&#39;YOUR_ENABLED_MODEL_OR_PROFILE_ID&#39;</span> <span class="dt">\</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="ex">go</span> test ./internal/server <span class="at">-run</span> <span class="st">&#39;^TestLiveClaudeBedrock&#39;</span> <span class="at">-count</span><span class="op">=</span>1 <span class="at">-v</span></span></code></pre></div>
+<p>Optionally set <code>ROUTSI_BEDROCK_TEST_REGION</code> and
+<code>ROUTSI_BEDROCK_TEST_PROFILE</code>. The tests skip under
+<code>-short</code>, when the model variable is absent, or when the AWS
+login is missing/expired. They cover exact text and a native
+schema-backed tool call.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li>Expired login: run <code>aws login</code>, or
+<code>aws sso login --profile NAME</code>.</li>
+<li>Missing region: set <code>aws_region</code>,
+<code>AWS_REGION</code>, or the profile’s region.</li>
+<li>Access denied: verify both Bedrock model access and IAM
+<code>bedrock:InvokeModel</code>.</li>
+<li>Validation error: verify the model/inference-profile ID exists in
+the configured region and supports Converse/tool use/cache points.</li>
+</ul></main></div>
+<footer><div class="wrap"><div class="brand"><span class="dot"></span>routsi</div><div><a href="../index.html">Home</a> · <a href="https://github.com/muthuishere/routsi" target="_blank" rel="noopener">GitHub</a> · MIT</div></div></footer><script>const root=document.documentElement,tb=document.getElementById('theme');const sv=localStorage.getItem('routsi-theme');if(sv)root.dataset.theme=sv;tb.onclick=()=>{const t=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=t;localStorage.setItem('routsi-theme',t)};</script></body></html>
