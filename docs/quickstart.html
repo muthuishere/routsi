@@ -51,6 +51,13 @@
       <a href="api.html">HTTP API</a>
     </div>
     <div class="grp">
+      <h4>Providers &amp; extensions</h4>
+      <a href="devin.html">Devin</a>
+      <a href="claude.html">Claude on AWS</a>
+      <a href="custom-adapters.html">Custom adapters</a>
+      <a href="analytics.html">S3 analytics</a>
+    </div>
+    <div class="grp">
       <h4>Recipes</h4>
       <a href="scenarios/index.html">Scenarios</a>
       <div class="sub">
@@ -82,7 +89,15 @@ routsi serve -port 9000            # …or override the port</pre></div>
   -d '{"model":"auto","messages":[{"role":"user","content":"hello"}]}'</pre></div>
     <div class="callout">The chosen answerer is returned in the <b>X-Selected-Model</b> response header, and every response carries a <b>usage</b> block.</div>
 
-    <p style="margin-top:44px"><a class="btn btn-ghost" href="concepts.html">Next: Core concepts →</a></p>
+    <h2 id="next">3 · choose your next guide</h2>
+    <ul>
+      <li><a class="link" href="devin.html"><strong>Devin</strong></a> — use the built-in direct Devin provider.</li>
+      <li><a class="link" href="claude.html"><strong>Claude on AWS</strong></a> — use Bedrock with your AWS credential chain.</li>
+      <li><a class="link" href="custom-adapters.html"><strong>Custom adapters</strong></a> — add a command or JavaScript-backed provider.</li>
+      <li><a class="link" href="analytics.html"><strong>S3 analytics</strong></a> — capture and aggregate request, token, latency, and routing data.</li>
+    </ul>
+
+    <p style="margin-top:44px"><a class="btn btn-ghost" href="concepts.html">Continue: Core concepts →</a></p>
   </main>
 </div>
 
