@@ -79,6 +79,7 @@
 
     <h2 id="configure">2 &middot; configure</h2>
     <p>Save as <code>~/.config/routsi/models.yaml</code>. routsi finds it automatically &mdash; a <code>./models.yaml</code> in the working directory wins, and <code>-config</code> beats both.</p>
+    <div class="callout"><b>Environment expansion everywhere.</b> Every ordinary YAML scalar supports <code>${VAR}</code>, including URLs, paths, ports, model names, commands, booleans, integers, and durations. Missing variables fail startup by name; commented references stay inert. Fields ending in <code>_env</code> already contain a variable name and therefore remain unexpanded.</div>
 <div class="code"><div class="top"><span>~/.config/routsi/models.yaml</span><button class="copy">copy</button></div><pre>listen: ":11080"
 default: small
 

@@ -45,7 +45,7 @@ credentials, and raw conversation IDs are excluded.</p>
   access_key: ${ROUTSI_S3_ACCESS_KEY}
   secret_key: ${ROUTSI_S3_SECRET_KEY}
   session_token: ${ROUTSI_S3_SESSION_TOKEN} # optional</code></pre>
-<p>Routsi expands exact <code>${VAR}</code> references at runtime and rejects literal credential values. <code>access_key</code> and <code>secret_key</code> must be configured together. When omitted, Routsi uses the normal AWS environment, profile, <code>aws login</code>/SSO, web-identity, container, or instance-role credential chain.</p>
+<p><code>${VAR}</code> expansion is available across all ordinary Routsi YAML values, not only analytics. Routsi expands references at runtime and rejects literal credential values. <code>access_key</code> and <code>secret_key</code> must be configured together. When omitted, Routsi uses the normal AWS environment, profile, <code>aws login</code>/SSO, web-identity, container, or instance-role credential chain.</p>
 <table><thead><tr><th>Service</th><th>Endpoint</th><th>Region</th><th>Path style</th></tr></thead><tbody>
 <tr><td>AWS S3</td><td>omit</td><td>bucket region</td><td>false</td></tr>
 <tr><td>MinIO</td><td><code>http://HOST:PORT</code></td><td><code>us-east-1</code></td><td>true</td></tr>
