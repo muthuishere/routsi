@@ -199,13 +199,10 @@ as a file — one-shot `devin -p` dies near ~80KB, smaller than opencode's syste
 prompt) and a warm session instead of a cold spawn per turn. Setup and the
 reference driver: `examples/interactive-worker/README.md`.
 
-The **one-shot agent backends** (`type: devin|codex|claude|copilot`) also speak
-tool calling now — a fenced-JSON emulation protocol renders the client's tool
-schemas into the prompt and parses the agent's decision back into wire-correct
-`tool_calls` (any parse failure degrades to plain text, never a fabricated call).
-So `{"model":"codex","tools":[...]}` just works. Guide for wiring **opencode** to
-either flavor — plus a custom JS decider that picks the agent per request:
-[`docs/opencode.md`](docs/opencode.md).
+The native Devin subscription adapter sends tool schemas directly in Devin's protobuf
+protocol and maps streamed tool-call deltas back to OpenAI `tool_calls`. It neither
+launches Devin CLI nor folds a tool manifest into the prompt. Optional CLI wrappers live
+only in [`examples/adapters`](examples/adapters/README.md).
 
 ### Where tool calling works today
 
@@ -213,7 +210,8 @@ either flavor — plus a custom JS decider that picks the agent per request:
 |---|---|---|
 | `forward` (OpenAI-compatible upstream) | ✅ full | raw byte passthrough — always worked |
 | `queue` (pull-worker) | ✅ full | job carries `tools`; worker answers with `tool_calls` |
-| `devin` / `codex` / `claude` / `copilot` | ✅ emulated | fenced-JSON protocol, parallel calls (ADR-011) |
+| `subscription`, `provider: devin` | ✅ native | direct Connect/protobuf definitions and deltas |
+| `subscription`, `provider: claude-bedrock` | ✅ native | direct AWS Converse/SigV4, AWS login chain, explicit cache points |
 | `forward` with `style: anthropic\|gemini` (translated) | ✅ full | relayed via toolnexus single-turn translation (ADR-010) |
 
 Every path supports tools. On a **translated** upstream the client's `tools` are
@@ -241,17 +239,19 @@ No root; everything lives under your home dir. macOS logs: `~/Library/Logs/routs
   split, escalations), auto-refreshing, self-contained.
 - **`/stats`** — JSON snapshot.
 - **`/metrics`** — Prometheus text (scrape it).
+- Optional durable analytics writes privacy-safe usage events to S3-compatible
+  storage and aggregates them with DuckDB. See [S3 and DuckDB analytics](docs/analytics.md).
 
 ## Config (`models.yaml`)
 
 See the commented [`models.yaml`](models.yaml). Highlights:
 
 - `type: forward` — any OpenAI-compatible upstream (raw byte passthrough).
-- `type: devin|codex|copilot|claude` — local agent CLIs (must be installed + logged in).
+- `type: subscription`, `provider: devin` — direct subscription-backed Connect/protobuf; no CLI subprocess.
+- `type: subscription`, `provider: claude-bedrock` — direct Amazon Bedrock Converse; reuses the AWS SDK login/profile chain.
 - `type: dynamic` — a virtual model with `levels: {low, medium, high}`.
 - `variants:` / `discover_models: true` — expand one entry into many models. Forwards
-  fetch upstream `GET /models`; Devin is probed live; codex/copilot/claude read
-  `~/.config/routsi/known-models.json` (editable).
+  fetch upstream `GET /models`; direct Devin discovers the logged-in account's catalog.
 
 ## How it differs from LiteLLM / OpenRouter / other gateways
 

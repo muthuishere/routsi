@@ -99,6 +99,19 @@ models.yaml           # sample config
   catalog (including agent-internal variants like `devin --model X`) based on signals
   TBD. Design inputs live in docs/research/; don't build it until the owner says so.
 
+## 2026-09-04 — direct Claude Code + Devin subscription providers (ADR-015)
+
+Owner rejected ADR-014's external command/sidecar destination for Claude and Devin.
+Routsi will instead own built-in `claude-code-api` and `devin-code-api` subscription
+providers, analogous in product shape to OpenCode's built-in Codex provider: runtime
+existing-login credential source, model/capability discovery, direct protocol
+translation, native streaming, tool-call translation and lifecycle inside Routsi.
+No per-request CLI spawn and no separately managed bridge. The old one-shot
+`type: claude|devin` backends remain deprecated; ADR-015 replaces their destination,
+not their implementation. Spike 008 records the captured Claude Messages/SSE and Devin
+Connect/protobuf paths. Next gates are secret-safe credential-source proofs and typed
+minimal-request clients; do not implement by replaying raw captures or logging tokens.
+
 ## Conversation contract
 
 - **Explicit `conversation_id`** (X-Conversation-Id header or body field) = the PROXY

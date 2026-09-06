@@ -24,6 +24,9 @@ const (
 	TypeDynamic ModelType = "dynamic"
 	TypeQueue   ModelType = "queue"   // pull-worker queue (ADR-001)
 	TypeCommand ModelType = "command" // exec adapter (ADR-013)
+	// TypeSubscription is a native subscription-backed protocol adapter. It
+	// never invokes a provider CLI during inference.
+	TypeSubscription ModelType = "subscription"
 )
 
 // ToolMode is how an adapter handles a request's `tools` (ADR-013).
@@ -87,6 +90,12 @@ type Model struct {
 	APIKeyEnv     string `yaml:"api_key_env"`
 	UpstreamModel string `yaml:"upstream_model"`
 
+	// AWS-backed native providers use the standard AWS SDK credential chain.
+	// Both are optional: the SDK falls back to AWS_REGION/AWS_PROFILE and the
+	// shared ~/.aws config, including credentials established by `aws login`.
+	AWSRegion  string `yaml:"aws_region"`
+	AWSProfile string `yaml:"aws_profile"`
+
 	// custom fields
 	Handler string `yaml:"handler"`
 
@@ -122,12 +131,57 @@ type Config struct {
 	Workers   WorkersConfig     `yaml:"workers"`
 	Decider   DeciderConfig     `yaml:"decider"`
 	HTTP      HTTPConfig        `yaml:"http"`
+	Analytics AnalyticsConfig   `yaml:"analytics"`
 
 	// StreamHeartbeat is how often the streaming envelope path writes an SSE
 	// comment (": ping\n\n") while a buffered backend is silently working, so
 	// idle-timeout intermediaries (nginx/ALB/Cloudflare) don't drop the
 	// connection. Default 15s; 0 disables heartbeats entirely.
 	StreamHeartbeat time.Duration `yaml:"stream_heartbeat"`
+}
+
+// AnalyticsConfig persists privacy-safe request metadata to an S3-compatible
+// bucket. It is opt-in; an empty Bucket keeps the pipeline entirely disabled.
+type AnalyticsConfig struct {
+	Bucket          string        `yaml:"bucket"`
+	Prefix          string        `yaml:"prefix"`
+	Region          string        `yaml:"region"`
+	Profile         string        `yaml:"profile"`
+	Endpoint        string        `yaml:"endpoint"`
+	UsePathStyle    bool          `yaml:"use_path_style"`
+	AccessKeyEnv    string        `yaml:"access_key_env"`
+	SecretKeyEnv    string        `yaml:"secret_key_env"`
+	SessionTokenEnv string        `yaml:"session_token_env"`
+	AccessKey       string        `yaml:"access_key"`
+	SecretKey       string        `yaml:"secret_key"`
+	SessionToken    string        `yaml:"session_token"`
+	FlushInterval   time.Duration `yaml:"flush_interval"`
+	BatchSize       int           `yaml:"batch_size"`
+	QueueSize       int           `yaml:"queue_size"`
+	SpoolDir        string        `yaml:"spool_dir"`
+	SpoolMaxBytes   int64         `yaml:"spool_max_bytes"`
+}
+
+func (a AnalyticsConfig) Defaults() AnalyticsConfig {
+	if a.Prefix == "" {
+		a.Prefix = "routsi/usage"
+	}
+	if a.FlushInterval <= 0 {
+		a.FlushInterval = 10 * time.Second
+	}
+	if a.BatchSize <= 0 {
+		a.BatchSize = 100
+	}
+	if a.QueueSize <= 0 {
+		a.QueueSize = 4096
+	}
+	if a.SpoolDir == "" {
+		a.SpoolDir = ConfigDir() + "/analytics-spool"
+	}
+	if a.SpoolMaxBytes <= 0 {
+		a.SpoolMaxBytes = 128 << 20
+	}
+	return a
 }
 
 // WorkersConfig is the pull-worker (ADR-001) settings block. Auth is a
@@ -250,8 +304,18 @@ func Load(path string) (*Config, error) {
 
 func Parse(b []byte) (*Config, error) {
 	cfg := &Config{Listen: ":11080", StickyTTL: 10 * time.Minute, StreamHeartbeat: 15 * time.Second}
-	if err := yaml.Unmarshal(b, cfg); err != nil {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(b, &doc); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
+	}
+	if err := validateCredentialReferences(&doc); err != nil {
+		return nil, err
+	}
+	if err := expandYAMLEnvironment(&doc, false, false); err != nil {
+		return nil, err
+	}
+	if err := doc.Decode(cfg); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
 	}
 	cfg.expandVariants()
 	if err := cfg.validate(); err != nil {
@@ -261,7 +325,97 @@ func Parse(b []byte) (*Config, error) {
 		cfg.Decider.Timeout = 3 * time.Second
 	}
 	cfg.HTTP = cfg.HTTP.Defaults()
+	cfg.Analytics = cfg.Analytics.Defaults()
 	return cfg, nil
+}
+
+// expandYAMLEnvironment expands ${VAR} in every YAML scalar value. Working on
+// the parsed node instead of raw bytes keeps comments inert and avoids
+// accidentally expanding examples that are commented out.
+func expandYAMLEnvironment(node *yaml.Node, mappingKey, skip bool) error {
+	if node.Kind == yaml.ScalarNode && !mappingKey && !skip && strings.Contains(node.Value, "${") {
+		expanded, err := expandEnvironment(node.Value)
+		if err != nil {
+			return err
+		}
+		node.Value, node.Tag = expanded, "" // decode resolves bool/int/duration again
+	}
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i < len(node.Content); i += 2 {
+			if err := expandYAMLEnvironment(node.Content[i], true, false); err != nil {
+				return err
+			}
+			skipValue := strings.HasSuffix(node.Content[i].Value, "_env")
+			if err := expandYAMLEnvironment(node.Content[i+1], false, skipValue); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, child := range node.Content {
+		if err := expandYAMLEnvironment(child, false, skip); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func expandEnvironment(value string) (string, error) {
+	var out strings.Builder
+	for {
+		start := strings.Index(value, "${")
+		if start < 0 {
+			out.WriteString(value)
+			return out.String(), nil
+		}
+		out.WriteString(value[:start])
+		value = value[start+2:]
+		end := strings.IndexByte(value, '}')
+		if end < 0 {
+			return "", fmt.Errorf("config: unterminated environment reference")
+		}
+		name := value[:end]
+		if name == "" || strings.ContainsAny(name, "${} \t\r\n") {
+			return "", fmt.Errorf("config: invalid environment reference")
+		}
+		expanded, ok := os.LookupEnv(name)
+		if !ok {
+			return "", fmt.Errorf("config: environment variable %s is not set", name)
+		}
+		out.WriteString(expanded)
+		value = value[end+1:]
+	}
+}
+
+// Credential-bearing YAML fields must be environment references. Validation
+// happens before expansion so a literal secret can never enter Config.
+func validateCredentialReferences(doc *yaml.Node) error {
+	if len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(root.Content); i += 2 {
+		if root.Content[i].Value != "analytics" {
+			continue
+		}
+		analytics := root.Content[i+1]
+		if analytics.Kind != yaml.MappingNode {
+			return nil
+		}
+		for j := 0; j < len(analytics.Content); j += 2 {
+			key, value := analytics.Content[j].Value, analytics.Content[j+1].Value
+			switch key {
+			case "access_key", "secret_key", "session_token":
+				if value != "" && !(strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}") && strings.Count(value, "${") == 1) {
+					return fmt.Errorf("config: analytics.%s must use ${ENV_VAR}, not a literal value", key)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // AddVariants appends expanded variant entries for base after load time
@@ -384,6 +538,10 @@ func (c *Config) validate() error {
 					return fmt.Errorf("config: command model %q: workdir %q is not a directory", m.Name, m.Workdir)
 				}
 			}
+		case TypeSubscription:
+			// The backend package owns provider registration. Keeping validation
+			// generic lets a built-in adapter self-register without a second edit
+			// here; server startup reports an unknown provider.
 		case TypeDynamic:
 			if len(m.Levels) == 0 {
 				return fmt.Errorf("config: dynamic model %q needs levels", m.Name)

@@ -11,6 +11,15 @@ task, sticky per conversation. Single Go binary.
 
 [Get started →](getting-started.md) · [GitHub →](https://github.com/muthuishere/routsi)
 
+## Guides
+
+- [Use Claude on AWS](claude.md) — direct Bedrock/SigV4 using your AWS login.
+- [Use Devin](devin.md) — direct Connect/protobuf using your Devin login.
+- [Create a custom adapter](custom-adapters.md) — turn any trusted executable into a
+  routable model, including structured tool calls.
+- [S3 and DuckDB analytics](analytics.md) — durable usage events, MinIO development,
+  and historical aggregation.
+
 ## Why
 
 Gateways (LiteLLM, Portkey, …) balance providers serving the *same* model. routsi

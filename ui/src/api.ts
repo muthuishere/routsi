@@ -33,6 +33,21 @@ export type Stats = {
   routed_requests: number;
   bypass_requests: number;
   total_errors: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  avg_latency_ms: number;
+  max_latency_ms: number;
+  analytics: {
+    enabled: boolean;
+    bucket?: string;
+    prefix?: string;
+    queued: number;
+    uploaded: number;
+    dropped: number;
+    spooled_batches: number;
+    upload_errors: number;
+  };
   models: ModelStat[];
 };
 

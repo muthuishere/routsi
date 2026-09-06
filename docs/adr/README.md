@@ -51,6 +51,19 @@ code out of the binary so the inbound direction is what routsi invests in.
 | [013](013-adapter-contract.md) | Adapter contract: one schema, three transports | **Accepted** | ✅ exec (`type: command`) shipped; socket specified; queue already live |
 | [014](014-deprecate-builtin-cli-agents.md) | Deprecate built-in CLI-agent types | **Accepted** | ⚠️ devin/codex/copilot/claude warn at startup; removal is a later owner call |
 
+## Subscription provider track (2026-09-04): direct use of authenticated subscriptions
+
+OpenCode's built-in Codex provider proved the product shape: built-in model capability,
+auth-aware transport translation and lifecycle management. The owner rejected the
+external command/sidecar destination from ADR-014 for Claude and Devin; Routsi will own
+direct subscription providers and reuse their existing-login credential sources at
+runtime.
+
+| ADR | Title | Status | Spike |
+|-----|-------|--------|-------|
+| [015](015-subscription-backed-cli-providers.md) | Built-in Claude Code + Devin subscription providers | **Accepted** | [008](../spikes/008-subscription-cli-protocols.md) ✅ traffic/control paths identified; credential + typed replay gates remain |
+| [016](016-s3-duckdb-analytics.md) | S3 durable analytics with DuckDB query layer | **Accepted** | Non-blocking JSONL ingestion, bounded spool, MinIO-compatible |
+
 WASM adapters were considered and rejected with the reason recorded in 013: **WASI cannot
 spawn a process**, and spawning is the entire job. WASM remains a candidate for the
 *decider* (pure function, per request), not for adapters.

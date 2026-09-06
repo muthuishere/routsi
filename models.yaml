@@ -1,5 +1,7 @@
 # routsi config. Ask for model "auto" to route; ask for a concrete
-# name to bypass routing entirely. API keys are env-var names, never values.
+# name to bypass routing entirely. Every scalar value supports ${VAR}
+# expansion. Fields ending in _env already expect a variable name and remain
+# unexpanded. API keys are env-var names, never values.
 listen: ":11080"
 default: gpt-cheap
 sticky_ttl: 10m
@@ -50,6 +52,25 @@ tiers:
 #   command: "node examples/decider.js"
 #   timeout: 3s
 
+# --- Durable analytics (optional). Request metadata and token counts are
+# buffered off the inference path and uploaded as partitioned JSONL objects to
+# any S3-compatible bucket. Prompts, responses, tool arguments, credentials,
+# and raw conversation ids are never stored.
+# analytics:
+#   bucket: routsi-analytics
+#   prefix: routsi/usage
+#   region: us-east-1
+#   profile: default             # optional; standard AWS credential chain
+#   # Any S3-compatible service; ${VAR} values expand at runtime:
+#   # access_key: ${ROUTSI_S3_ACCESS_KEY}
+#   # secret_key: ${ROUTSI_S3_SECRET_KEY}
+#   # session_token: ${ROUTSI_S3_SESSION_TOKEN}  # optional
+#   flush_interval: 10s
+#   batch_size: 100
+#   # MinIO/R2/other S3-compatible storage:
+#   # endpoint: http://127.0.0.1:9000
+#   # use_path_style: true
+
 # Dynamic virtual models: ask for "dynamic-1" and the task is classified
 # (low|medium|high) and dispatched to the mapped member — any catalog model
 # works, including discovered variants and CLI agents. Conversations pin to
@@ -99,30 +120,38 @@ models:
   #   type: custom
   #   handler: my-handler
 
-  # CLI agents as models. `variants:` expands into catalog entries
-  # (devin/opus, codex/gpt-5.6-sol, ...) selectable like any model; `provider:`
-  # shows as owned_by in /v1/models. State lives in a proxy-managed cache dir.
-  # - name: devin        # conversations map to real Devin sessions (-r resume)
-  #   type: devin
-  #   provider: cognition
-  #   bin: /opt/homebrew/bin/devin              # optional; default = "devin" on PATH
-  #   args: ["--org", "acme"]                   # optional; prepended to every invocation
-  #   variants: [sonnet, opus]                 # -> devin --model <variant>
-  #   permission_mode: auto                    # optional -> devin --permission-mode
-  # - name: codex        # one-shot codex exec; model names depend on your account
-  #   type: codex
-  #   provider: openai
-  #   variants: [gpt-5.6-sol]                  # -> codex exec -m <variant>
-  # - name: copilot
-  #   type: copilot
-  #   provider: github
-  #   variants: [claude-sonnet-5]              # -> copilot --model <variant>
-  # - name: claude       # Claude Code CLI, one-shot -p
-  #   type: claude
-  #   provider: anthropic
-  #   discover_models: true                    # models from known-models.json
+  # --- Optional built-in providers and adapters. Every example below is
+  # commented out, so none is initialized or used until deliberately enabled.
+
+  # Built-in Devin: direct HTTP/Connect + protobuf. No Devin CLI at inference.
+  # - name: devin
+  #   type: subscription
+  #   provider: devin
+  #   upstream_model: SWE-1.6 Slow             # optional label or wire UID
+
+  # Built-in Claude on AWS: direct Bedrock Converse + SigV4. Reuses the AWS
+  # SDK credential chain (`aws login`, SSO profile, role, or environment).
+  # - name: claude-aws
+  #   type: subscription
+  #   provider: claude-bedrock
+  #   upstream_model: YOUR_ENABLED_BEDROCK_MODEL_OR_PROFILE_ID
+  #   aws_region: us-east-1                    # optional when profile/env supplies it
+  #   aws_profile: default                     # optional
+
+  # Local Llama: any local runtime exposing an OpenAI-compatible endpoint,
+  # such as llama.cpp server. Change the model name/port for your runtime.
+  # - name: llama-local
+  #   type: forward
+  #   provider: llama-local
+  #   base_url: http://127.0.0.1:8080/v1
+  #   upstream_model: local-model
+
+  # Simple JavaScript adapter shipped by `routsi install --adapters`.
+  # - name: js-example
+  #   type: command
+  #   provider: local-js
+  #   command: node $ROUTSI_ADAPTERS/echo-tools.js
+  #   timeout: 30s
+  #   tools: native
   #
-  # codex/copilot/claude model lists are configurable in
-  # ~/.config/routsi/known-models.json (written with defaults on
-  # first run); devin's list is discovered live from the CLI itself.
   # This file may also live at ~/.config/routsi/models.yaml.

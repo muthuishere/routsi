@@ -5,12 +5,17 @@ export function Cards({ s }: { s: Stats }) {
   const errRate = s.total_requests
     ? ((100 * s.total_errors) / s.total_requests).toFixed(1)
     : "0.0";
+	const providers = new Map<string, number>();
+	for (const model of s.models) providers.set(model.provider ?? "unknown", (providers.get(model.provider ?? "unknown") ?? 0) + model.requests);
+	const topProvider = [...providers.entries()].sort((a, b) => b[1] - a[1])[0];
   const cards: [string, string, string?][] = [
     ["Requests", fmt(s.total_requests)],
-    ["Routed", fmt(s.routed_requests), "auto/dynamic"],
-    ["Bypass", fmt(s.bypass_requests), "named model"],
+    ["Total tokens", fmt(s.total_tokens), `${fmt(s.prompt_tokens)} in · ${fmt(s.completion_tokens)} out · estimated`],
+    ["Avg latency", fmt(s.avg_latency_ms) + "ms", `max ${fmt(s.max_latency_ms)}ms`],
     ["Errors", fmt(s.total_errors), errRate + "%"],
-    ["Models used", fmt(s.models.length)],
+    ["Models used", fmt(s.models.length), `${fmt(s.routed_requests)} routed · ${fmt(s.bypass_requests)} direct`],
+	["Top provider", topProvider?.[0] ?? "—", topProvider ? `${fmt(topProvider[1])} requests` : "no traffic"],
+    ["S3 events", s.analytics?.enabled ? fmt(s.analytics.uploaded) : "off", s.analytics?.enabled ? `${s.analytics.queued} queued · ${s.analytics.spooled_batches} spooled` : "analytics disabled"],
   ];
   return (
     <div className="cards">
@@ -43,6 +48,8 @@ export function ModelTable({ s }: { s: Stats }) {
           <th>Requests</th>
           <th>Escalations</th>
           <th>Tokens</th>
+		  <th>Input</th>
+		  <th>Output</th>
           <th>Avg</th>
           <th>Max</th>
           <th>Errors</th>
@@ -62,6 +69,8 @@ export function ModelTable({ s }: { s: Stats }) {
               <td>{fmt(m.requests)}</td>
               <td>{m.escalations ? <span className="tag">{m.escalations}</span> : "—"}</td>
               <td>{tok ? fmt(tok) : "—"}</td>
+			  <td>{m.prompt_tokens ? fmt(m.prompt_tokens) : "—"}</td>
+			  <td>{m.completion_tokens ? fmt(m.completion_tokens) : "—"}</td>
               <td>
                 {m.avg_latency_ms}
                 <small style={{ color: "var(--mut)" }}>ms</small>

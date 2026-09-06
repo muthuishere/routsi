@@ -25,13 +25,13 @@ type Event struct {
 }
 
 type modelStat struct {
-	Requests   int64
-	Errors     int64
+	Requests    int64
+	Errors      int64
 	Escalations int64
-	PromptTok  int64
-	ComplTok   int64
-	LatSumMs   int64
-	LatMaxMs   int64
+	PromptTok   int64
+	ComplTok    int64
+	LatSumMs    int64
+	LatMaxMs    int64
 }
 
 // Collector is safe for concurrent use.
@@ -103,12 +103,17 @@ type ModelSnapshot struct {
 }
 
 type Snapshot struct {
-	UptimeSeconds int64           `json:"uptime_seconds"`
-	TotalRequests int64           `json:"total_requests"`
-	RoutedRequests int64          `json:"routed_requests"`
-	BypassRequests int64          `json:"bypass_requests"`
-	TotalErrors   int64           `json:"total_errors"`
-	Models        []ModelSnapshot `json:"models"`
+	UptimeSeconds    int64           `json:"uptime_seconds"`
+	TotalRequests    int64           `json:"total_requests"`
+	RoutedRequests   int64           `json:"routed_requests"`
+	BypassRequests   int64           `json:"bypass_requests"`
+	TotalErrors      int64           `json:"total_errors"`
+	PromptTokens     int64           `json:"prompt_tokens"`
+	CompletionTokens int64           `json:"completion_tokens"`
+	TotalTokens      int64           `json:"total_tokens"`
+	AvgLatencyMs     int64           `json:"avg_latency_ms"`
+	MaxLatencyMs     int64           `json:"max_latency_ms"`
+	Models           []ModelSnapshot `json:"models"`
 }
 
 func (c *Collector) Snapshot() Snapshot {
@@ -137,6 +142,16 @@ func (c *Collector) Snapshot() Snapshot {
 			AvgLatencyMs:     avg,
 			MaxLatencyMs:     s.LatMaxMs,
 		})
+		snap.PromptTokens += s.PromptTok
+		snap.CompletionTokens += s.ComplTok
+		snap.AvgLatencyMs += s.LatSumMs
+		if s.LatMaxMs > snap.MaxLatencyMs {
+			snap.MaxLatencyMs = s.LatMaxMs
+		}
+	}
+	snap.TotalTokens = snap.PromptTokens + snap.CompletionTokens
+	if snap.TotalRequests > 0 {
+		snap.AvgLatencyMs /= snap.TotalRequests
 	}
 	sort.Slice(snap.Models, func(i, j int) bool {
 		return snap.Models[i].Requests > snap.Models[j].Requests

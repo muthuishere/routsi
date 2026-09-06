@@ -3,6 +3,12 @@
 Status: **Accepted** (owner-directed, 2026-08-05). Supersedes the CLI-agent portion of
 ADR-011; ADR-011 Phase A's tool emulation survives as a *mode* of the adapter contract.
 
+**Partial supersession (2026-09-04):** ADR-015 replaces this ADR's external
+command/sidecar destination for Claude Code and Devin with direct built-in subscription
+providers. Their old one-shot `type: claude|devin` implementations remain deprecated;
+the replacement architecture changed. This ADR continues unchanged for Codex and
+Copilot pending a separate owner decision.
+
 ## Context
 
 routsi ships four vendor-specific model types — `devin`, `codex`, `copilot`, `claude`

@@ -8,9 +8,44 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"sync"
 
 	"github.com/muthuishere/routsi/internal/api"
+	"github.com/muthuishere/routsi/internal/config"
 )
+
+// SubscriptionFactory constructs a native subscription/account-backed
+// provider. Provider implementations register themselves from init, so the
+// server never needs provider-specific wiring.
+type SubscriptionFactory func(context.Context, *config.Model, *http.Client) (Backend, error)
+
+var subscriptionFactories = struct {
+	sync.RWMutex
+	items map[string]SubscriptionFactory
+}{items: map[string]SubscriptionFactory{}}
+
+func RegisterSubscription(provider string, factory SubscriptionFactory) {
+	subscriptionFactories.Lock()
+	defer subscriptionFactories.Unlock()
+	if provider == "" || factory == nil {
+		panic("backend: invalid subscription provider registration")
+	}
+	if _, exists := subscriptionFactories.items[provider]; exists {
+		panic("backend: duplicate subscription provider registration: " + provider)
+	}
+	subscriptionFactories.items[provider] = factory
+}
+
+func NewSubscription(ctx context.Context, m *config.Model, client *http.Client) (Backend, error) {
+	subscriptionFactories.RLock()
+	factory := subscriptionFactories.items[m.Provider]
+	subscriptionFactories.RUnlock()
+	if factory == nil {
+		return nil, fmt.Errorf("unsupported subscription provider %q", m.Provider)
+	}
+	return factory(ctx, m, client)
+}
 
 // Backend produces answer content; the server wraps it in the OpenAI envelope
 // (chat.completion, or chat.completion.chunk SSE frames when streaming).

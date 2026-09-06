@@ -6,6 +6,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/muthuishere/routsi/internal/analytics"
 	"github.com/muthuishere/routsi/internal/api"
 	"github.com/muthuishere/routsi/internal/audit"
 	"github.com/muthuishere/routsi/internal/backend"
@@ -40,15 +42,16 @@ type target struct {
 }
 
 type Server struct {
-	cfg      *config.Config
-	registry *backend.Registry
-	router   router.Router
-	sticky   *sticky.Store
-	targets  map[string]*target
-	metrics  *metrics.Collector
-	audit    *audit.Ring
-	tokens   []string // bearer tokens; empty = auth off
-	broker   *queue.Broker
+	cfg       *config.Config
+	registry  *backend.Registry
+	router    router.Router
+	sticky    *sticky.Store
+	targets   map[string]*target
+	metrics   *metrics.Collector
+	audit     *audit.Ring
+	analytics *analytics.Pipeline
+	tokens    []string // bearer tokens; empty = auth off
+	broker    *queue.Broker
 
 	dmu     sync.RWMutex       // guards dynamic (runtime-registered) queue targets
 	dynamic map[string]*target // queue name -> target, added on worker register
@@ -69,17 +72,22 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 	if rt == nil {
 		rt = router.NewRules()
 	}
+	analyticsPipeline, err := analytics.New(context.Background(), cfg.Analytics)
+	if err != nil {
+		return nil, err
+	}
 	s := &Server{
-		cfg:      cfg,
-		registry: reg,
-		router:   rt,
-		sticky:   sticky.New(cfg.StickyTTL),
-		targets:  map[string]*target{},
-		metrics:  metrics.New(),
-		audit:    audit.New(),
-		tokens:   cfg.Auth.AuthTokens(),
-		broker:   queue.NewWithConfig(cfg.Workers.Freshness, cfg.Workers.MaxWait),
-		dynamic:  map[string]*target{},
+		cfg:       cfg,
+		registry:  reg,
+		router:    rt,
+		sticky:    sticky.New(cfg.StickyTTL),
+		targets:   map[string]*target{},
+		metrics:   metrics.New(),
+		audit:     audit.New(),
+		analytics: analyticsPipeline,
+		tokens:    cfg.Auth.AuthTokens(),
+		broker:    queue.NewWithConfig(cfg.Workers.Freshness, cfg.Workers.MaxWait),
+		dynamic:   map[string]*target{},
 	}
 	// One pooled client for every forward upstream (config.HTTPConfig).
 	httpClient := backend.NewHTTPClient(cfg.HTTP)
@@ -104,6 +112,12 @@ func New(cfg *config.Config, reg *backend.Registry, rt router.Router) (*Server, 
 			t.backend = backend.NewCLIAgent(m)
 		case m.Type == config.TypeCommand:
 			t.backend = backend.NewCommand(m)
+		case m.Type == config.TypeSubscription:
+			var err error
+			t.backend, err = backend.NewSubscription(context.Background(), m, httpClient)
+			if err != nil {
+				return nil, fmt.Errorf("model %q: %w", m.Name, err)
+			}
 		case m.Type == config.TypeQueue:
 			// Config-declared queue reserves the name; a worker supplies
 			// answers at runtime via the broker.
@@ -153,7 +167,11 @@ func (s *Server) Handler() http.Handler {
 	}))
 	mux.HandleFunc("GET /stats", s.guard(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(s.metrics.Snapshot())
+		view := struct {
+			metrics.Snapshot
+			Analytics analytics.Status `json:"analytics"`
+		}{Snapshot: s.metrics.Snapshot(), Analytics: s.analytics.Status()}
+		_ = json.NewEncoder(w).Encode(view)
 	}))
 	mux.HandleFunc("GET /audit", s.guard(func(w http.ResponseWriter, r *http.Request) {
 		limit := 100
@@ -221,6 +239,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		ev.LatencyMs, ev.Err = latency, err != nil
 		s.metrics.Record(ev) // token counts unknown on raw passthrough
 		s.recordAudit(req.Model, t.model.Name, dec.level, source, status, latency, nil, convID)
+		s.recordAnalytics(&req, t.model, dec, source, status, latency, nil, convID)
 		logReq(req.Model, t.model.Name, convID, status, start, err)
 		return
 	}
@@ -237,7 +256,21 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		status = 0
 	}
 	s.recordAudit(req.Model, t.model.Name, dec.level, source, status, latency, usage, convID)
+	s.recordAnalytics(&req, t.model, dec, source, status, latency, usage, convID)
 	logReq(req.Model, t.model.Name, convID, status, start, err)
+}
+
+func (s *Server) recordAnalytics(req *api.ChatRequest, model *config.Model, dec decision, source string, status int, latency int64, usage *api.Usage, convID string) {
+	ev := analytics.Event{RequestedModel: req.Model, SelectedModel: model.Name, Provider: model.Provider, Level: dec.level, Source: source, Status: status, LatencyMs: latency, Routed: dec.routed, Escalated: dec.escalated, ToolsRequested: len(req.Tools) > 0, TokenSource: "unknown"}
+	if usage != nil {
+		ev.PromptTokens, ev.CompletionTokens, ev.TotalTokens = usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens
+		ev.TokenSource = "estimated"
+	}
+	if convID != "" {
+		sum := sha256.Sum256([]byte(convID))
+		ev.ConversationHash = hex.EncodeToString(sum[:8])
+	}
+	s.analytics.Record(ev)
 }
 
 // recordAudit appends one decision to the audit ring. Never blocks or fails

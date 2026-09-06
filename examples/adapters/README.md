@@ -1,8 +1,9 @@
 # Adapters
 
-An **adapter** makes something that isn't an OpenAI API answer as one: a CLI agent, a
-script, a workflow runner, a live session. routsi core carries no vendor-specific code —
-the adapter is your file (ADR-013).
+An **adapter** makes something that isn't an OpenAI API answer as one: a script, a
+workflow runner, or a live session. Routsi also has a small set of deeper built-in
+providers (currently direct Devin and Claude on AWS); this directory is for optional,
+editable command adapters (ADR-013).
 
 One schema, three transports:
 

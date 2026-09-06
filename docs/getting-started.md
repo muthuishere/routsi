@@ -30,6 +30,13 @@ Save as `~/.config/routsi/models.yaml` (routsi finds it automatically; a
 also ships as
 [`examples/models.qwen.yaml`](https://github.com/muthuishere/routsi/blob/main/examples/models.qwen.yaml):
 
+Every ordinary YAML scalar supports runtime `${VAR}` expansion, including URLs,
+paths, ports, model names, commands, booleans, integers, and durations. Missing
+variables fail startup by name, while references inside comments are ignored.
+Fields ending in `_env` are the deliberate exception because their value is already
+an environment-variable name: write `api_key_env: OPENAI_API_KEY`, not
+`api_key_env: ${OPENAI_API_KEY}`.
+
 ```yaml
 listen: ":11080"
 default: small
@@ -246,6 +253,9 @@ for m in json.load(sys.stdin)['data']:
 
 ## Where to go next
 
+- [Use Claude Code](claude.md)
+- [Use Devin](devin.md)
+- [Create a custom adapter](custom-adapters.md)
 - [Using routsi with opencode](opencode.md)
 - [Adapter contract (ADR-013)](adr/013-adapter-contract.md) — any executable as a model
 - [Pull workers (ADR-001)](adr/001-pull-worker-queue.md) — a model behind a firewall
