@@ -9,6 +9,8 @@ at it.
 **New here? → [Get started](docs/getting-started.md)** — a copy-paste config with a
 cheap and a strong rung on OpenRouter (Qwen 3.7), running in five minutes.
 
+**[▶ Watch the 86s demo](https://github.com/deemwario/routsi/releases/download/demo-assets/final.mp4)** — one endpoint, every model, routed by task.
+
 ## Quick start
 
 ```sh
